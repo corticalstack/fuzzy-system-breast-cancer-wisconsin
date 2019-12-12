@@ -4,12 +4,9 @@ import pandas as pd
 import numpy as np
 import seaborn as sns
 import matplotlib.pyplot as plt
-from sklearn.feature_selection import chi2, RFE, SelectKBest
-from sklearn.linear_model import LogisticRegression
-from sklearn.decomposition import PCA
-from sklearn.ensemble import ExtraTreesClassifier, RandomForestClassifier
+from sklearn.feature_selection import chi2, SelectKBest
+from sklearn.ensemble import RandomForestClassifier
 from sklearn.preprocessing import MinMaxScaler
-
 
 
 @contextmanager
@@ -19,7 +16,7 @@ def timer(title):
     print('{} - done in {:.0f}s'.format(title, time.time() - t0))
 
 
-class WisconsinBreastCancer:
+class WDBCAnalysis:
     def __init__(self):
         self.random_state = 20
         self.column_stats = {}
@@ -57,7 +54,10 @@ class WisconsinBreastCancer:
             self.scale()
             self.distribution_multi_kde()
             self.distplot()
-            self.boxplot()
+            self.kdeplot_with_target()
+
+        with timer('\nOutput Wrangled Dataset'):
+            self.write_csv()
 
     def load_data(self):
         self.wdbc_full = pd.read_csv('data/wdbc.data', header=None)
@@ -70,7 +70,7 @@ class WisconsinBreastCancer:
                                   'AreaMax', 'SmoothnessMax', 'CompactnessMax', 'ConcavityMax', 'ConcavePointsMax',
                                   'SymmetryMax', 'FractalDimensionMax']
 
-        print('\n--- Shape after data load')
+        print('\n', '_' * 40, 'Shape After Data Load', '_' * 40)
         self.print_shape()
 
     def encode_target(self):
@@ -78,7 +78,7 @@ class WisconsinBreastCancer:
         self.wdbc_full['Diagnosis'].astype(int)
 
     def column_statistics(self):
-        print('\n--- Column Stats')
+        print('\n', '_' * 40, 'Column Statistics', '_' * 40)
         for col in self.wdbc_full:
             self.column_stats[col + '_dtype'] = self.wdbc_full[col].dtype
             self.column_stats[col + '_zero_num'] = (self.wdbc_full[col] == 0).sum()
@@ -118,8 +118,8 @@ class WisconsinBreastCancer:
         self.y = pd.Series(self.wdbc_full.Diagnosis)
 
     def univariate_feature_selection(self):
+        print('\n', '_' * 40, 'Univariate Feature Selection With Chi-squared', '_' * 40)
         k = 15
-        print('\n', '_' * 40, 'Univariate feature selection with chi-squared', '_' * 40)
         kbest = SelectKBest(score_func=chi2, k=15)
         fit = kbest.fit(self.X, self.y)
         print(fit.scores_)
@@ -128,9 +128,9 @@ class WisconsinBreastCancer:
         print(features_selected)
 
     def random_forest_classifier(self):
+        print('\n\n', '_' * 40, 'Random Forest Classifier', '_' * 40)
         data = pd.DataFrame(columns=['Feature', 'Random Forest Importance Score'])
         k = 15
-        print('\n\n', '_' * 40, 'Random Forest Classifier', '_' * 40)
         model = RandomForestClassifier(n_estimators=100, random_state=self.random_state)
         model.fit(self.X, self.y)
         ranked = list(zip(self.X.columns, model.feature_importances_))
@@ -153,7 +153,7 @@ class WisconsinBreastCancer:
         self.X_scaled = pd.DataFrame(self.X_scaled, columns=self.X.columns)
 
     def row_count_by_target(self, target):
-        print('\n--- Row count by {}'.format(target))
+        print('\n\n', '_' * 40, 'Row Count By {}'.format(target), '_' * 40)
         series = self.wdbc_full[target].value_counts()
         for idx, val in series.iteritems():
             print('\t{}: {} ({:6.3f}%)'.format(idx, val, ((val / self.wdbc_full.shape[0]) * 100)))
@@ -164,7 +164,7 @@ class WisconsinBreastCancer:
 
     def distribution_multi_kde(self):
         for col in self.X_scaled:
-          sns.kdeplot(self.X_scaled[col], shade=True)
+            sns.kdeplot(self.X_scaled[col], shade=True)
 
         plt.savefig(fname='plots/wbc distplot.png', dpi=300, format='png')
         plt.show()
@@ -212,12 +212,19 @@ class WisconsinBreastCancer:
             plt.savefig(fname='plots/wdbc dist ' + col + '.png', dpi=300, format='png')
             plt.show()
 
-    def boxplot(self):
-        palette = {1: "g", 0: "r"}
+    def kdeplot_with_target(self):
         for col in self.X:
-            sns.catplot(x='Diagnosis', y=col, kind='violin', data=self.wdbc_full, palette=palette)
-            plt.savefig(fname='plots/wdbc violin ' + col + '.png', dpi=300, format='png')
+            sns.kdeplot(self.wdbc_full.loc[self.wdbc_full['Diagnosis'] == 0, col], shade=True, color='r')
+            sns.kdeplot(self.wdbc_full.loc[self.wdbc_full['Diagnosis'] == 1, col], shade=True, color='g')
+            plt.xlabel(col)
+            plt.ylabel('Density')
+            plt.legend(labels=['Malignant', 'Benign'])
+            plt.savefig(fname='plots/wdbc kdeplot with target - ' + col + '.png', dpi=300, format='png')
             plt.show()
 
+    def write_csv(self):
+        cols = ['ID'] + list(self.X.columns) + ['Diagnosis']
+        self.wdbc_full[cols].to_csv('data/wdbc_selected_cols.csv', header=True, index=False)
 
-wisconsinBreastCancer = WisconsinBreastCancer()
+
+wdbcAnalysis = WDBCAnalysis()

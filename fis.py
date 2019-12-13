@@ -27,12 +27,13 @@ class WDBCFis:
         self.y_train = None
         self.y_test = None
 
-        self.antecendants = {}
+        self.ant = {}  # antecendents
         self.diagnosis = None
         self.PerimeterMax = None
         self.ConcavePointsMax = None
 
         self.rule1 = None
+        self.rules = []
 
         with timer('\nLoad dataset'):
             self.load_data()
@@ -55,14 +56,26 @@ class WDBCFis:
             self.set_rules()
 
         with timer('\nSetting System'):
-            system = ctrl.ControlSystem(rules=[self.rule1])
+            system = ctrl.ControlSystem(rules=self.rules)
             self.sim = ctrl.ControlSystemSimulation(system)
 
         with timer('\nMaking Predictions'):
             # Should lop through all test data here, store, defuzzify, compoare with ground truth
-            self.sim.input['PerimeterMax'] = 150
+            self.sim.input['PerimeterMax'] = 60
+            self.sim.input['ConcavePointsMax'] = 0.05
+
             self.sim.compute()
             print('Decision is ', self.sim.output['diagnosis'])
+            self.diagnosis.view(sim=self.sim)
+            plt.show()
+
+            self.sim.input['PerimeterMax'] = 150
+            self.sim.input['ConcavePointsMax'] = 0.25
+
+            self.sim.compute()
+            print('Decision is ', self.sim.output['diagnosis'])
+            self.diagnosis.view(sim=self.sim)
+            plt.show()
 
     def load_data(self):
         self.X = pd.read_csv('data/wdbc_selected_cols.csv')
@@ -88,21 +101,37 @@ class WDBCFis:
         for col in self.X:
             if col == 'ID':
                 continue
-            # Set universe for each antecendant
-            self.antecendants[col] = ctrl.Antecedent(np.linspace(self.X[col].min(), self.X[col].max()), col)
-        #self.ConcavePointsMax = ctrl.Antecedent(np.arange(0, 100000, 1000), 'ConcavePointsMax')
+            # Set universe for each antecendant - believe default intervals for linspace is 50
+            self.ant[col] = ctrl.Antecedent(np.linspace(self.X[col].min(), self.X[col].max()), col)
 
     def set_consequent(self):
         self.diagnosis = ctrl.Consequent(np.arange(0, 100, 1), 'diagnosis')
-        self.diagnosis['high'] = fz.trapmf(self.diagnosis.universe, [40, 55, 80, 100])
+        self.diagnosis['low'] = fz.trapmf(self.diagnosis.universe, [0, 10, 40, 50])
+        self.diagnosis['high'] = fz.trapmf(self.diagnosis.universe, [50, 60, 90, 100])
 
+    # Diagnosis: Malignant = Class 0, Benign = class 1
     def set_mf(self):
-        for ant in self.antecendants:
-            if ant == 'PerimeterMax':
-                self.antecendants[ant]['low'] = fz.trapmf(self.antecendants[ant].universe, [0, 100, 150, 250])
+        df_tmp = pd.concat([self.X_train, self.y_train], axis=1)
+        for a in self.ant:
+                # Low risk
+                mean = df_tmp.loc[df_tmp['Diagnosis'] == 0, a].mean()
+                std = df_tmp.loc[df_tmp['Diagnosis'] == 0, a].std()
+                self.ant[a]['low'] = fz.gaussmf(self.ant[a].universe, mean, std)
+
+                # High risk
+                mean = df_tmp.loc[df_tmp['Diagnosis'] == 1, a].mean()
+                std = df_tmp.loc[df_tmp['Diagnosis'] == 1, a].std()
+                self.ant[a]['high'] = fz.gaussmf(self.ant[a].universe, mean, std)
+                self.ant[a].view()
 
     def set_rules(self):
-        self.rule1 = ctrl.Rule(self.antecendants['PerimeterMax']['low'], consequent=self.diagnosis['high'], label='High Risk')
+        r = ctrl.Rule(self.ant['PerimeterMax']['low'] & self.ant['ConcavePointsMax']['low'],
+                      consequent=self.diagnosis['low'], label='Low Risk')
+        self.rules.append(r)
+
+        r = ctrl.Rule(self.ant['PerimeterMax']['high'] & self.ant['ConcavePointsMax']['high'],
+                      consequent=self.diagnosis['high'], label='high Risk')
+        self.rules.append(r)
 
 
 wdbcFis = WDBCFis()

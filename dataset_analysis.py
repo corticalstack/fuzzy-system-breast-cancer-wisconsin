@@ -25,7 +25,7 @@ class WDBCAnalysis:
         self.y = None
         self.X_scaled = None
 
-        self.label_map_string_2_int = {'M': 0, 'B': 1}
+        self.label_map_string_2_int = {'M': 1, 'B': 0}
 
         self.features_selected = []
         self.highly_correlated_features = []
@@ -214,8 +214,8 @@ class WDBCAnalysis:
 
     def kdeplot_with_target(self):
         for col in self.X:
-            sns.kdeplot(self.wdbc_full.loc[self.wdbc_full['Diagnosis'] == 0, col], shade=True, color='r')
-            sns.kdeplot(self.wdbc_full.loc[self.wdbc_full['Diagnosis'] == 1, col], shade=True, color='g')
+            sns.kdeplot(self.wdbc_full.loc[self.wdbc_full['Diagnosis'] == 1, col], shade=True, color='r')
+            sns.kdeplot(self.wdbc_full.loc[self.wdbc_full['Diagnosis'] == 0, col], shade=True, color='g')
             plt.xlabel(col)
             plt.ylabel('Density')
             plt.legend(labels=['Malignant', 'Benign'])

@@ -5,6 +5,7 @@ import numpy as np
 from sklearn.model_selection import train_test_split
 import skfuzzy as fz
 from skfuzzy import control as ctrl
+from sklearn.metrics import accuracy_score
 from matplotlib import pyplot as plt
 
 
@@ -26,6 +27,7 @@ class WDBCFis:
         self.X_test = None
         self.y_train = None
         self.y_test = None
+        self.y_predict = []
 
         self.ant = {}  # antecendents
         self.diagnosis = None
@@ -34,6 +36,8 @@ class WDBCFis:
 
         self.rule1 = None
         self.rules = []
+
+        self.accuracy_score = 0
 
         with timer('\nLoad dataset'):
             self.load_data()
@@ -61,21 +65,7 @@ class WDBCFis:
 
         with timer('\nMaking Predictions'):
             # Should lop through all test data here, store, defuzzify, compoare with ground truth
-            self.sim.input['PerimeterMax'] = 60
-            self.sim.input['ConcavePointsMax'] = 0.05
-
-            self.sim.compute()
-            print('Decision is ', self.sim.output['diagnosis'])
-            self.diagnosis.view(sim=self.sim)
-            plt.show()
-
-            self.sim.input['PerimeterMax'] = 150
-            self.sim.input['ConcavePointsMax'] = 0.25
-
-            self.sim.compute()
-            print('Decision is ', self.sim.output['diagnosis'])
-            self.diagnosis.view(sim=self.sim)
-            plt.show()
+            self.predict()
 
     def load_data(self):
         self.X = pd.read_csv('data/wdbc_selected_cols.csv')
@@ -109,7 +99,7 @@ class WDBCFis:
         self.diagnosis['low'] = fz.trapmf(self.diagnosis.universe, [0, 10, 40, 50])
         self.diagnosis['high'] = fz.trapmf(self.diagnosis.universe, [50, 60, 90, 100])
 
-    # Diagnosis: Malignant = Class 0, Benign = class 1
+    # Diagnosis: Malignant = Class 1, Benign = class 0
     def set_mf(self):
         df_tmp = pd.concat([self.X_train, self.y_train], axis=1)
         for a in self.ant:
@@ -122,7 +112,7 @@ class WDBCFis:
                 mean = df_tmp.loc[df_tmp['Diagnosis'] == 1, a].mean()
                 std = df_tmp.loc[df_tmp['Diagnosis'] == 1, a].std()
                 self.ant[a]['high'] = fz.gaussmf(self.ant[a].universe, mean, std)
-                self.ant[a].view()
+                #self.ant[a].view()
 
     def set_rules(self):
         r = ctrl.Rule(self.ant['PerimeterMax']['low'] & self.ant['ConcavePointsMax']['low'],
@@ -132,6 +122,27 @@ class WDBCFis:
         r = ctrl.Rule(self.ant['PerimeterMax']['high'] & self.ant['ConcavePointsMax']['high'],
                       consequent=self.diagnosis['high'], label='high Risk')
         self.rules.append(r)
+
+    def predict(self):
+        id = 0
+        y_pred = []
+        for di, dr in self.X_test.iterrows():
+            for si, sv in dr.iteritems():
+                if si == 'ID':
+                    id = sv
+                if si == 'PerimeterMax' or si == 'ConcavePointsMax':
+                    self.sim.input[si] = sv
+            self.sim.compute()
+            output = {'ID': sv, 'FuzzyOut': self.sim.output['diagnosis'], 'CrispOut': 0 if self.sim.output['diagnosis'] < 50 else 1}
+            y_pred.append(output['CrispOut'])
+            self.y_predict.append(output)
+
+        for r in self.y_predict:
+            print(r)
+        for y in self.y_test:
+            print(y)
+        self.accuracy_score = accuracy_score(self.y_test, y_pred)
+        print('Accuracy ', self.accuracy_score)
 
 
 wdbcFis = WDBCFis()

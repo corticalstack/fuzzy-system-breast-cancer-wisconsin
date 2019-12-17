@@ -4,15 +4,15 @@ import collections
 import operator
 import pandas as pd
 import numpy as np
-from sklearn.model_selection import train_test_split
 import skfuzzy as fz
 from skfuzzy import control as ct
-from sklearn.metrics import accuracy_score
-from scipy import stats
-from matplotlib import pyplot as plt
+from sklearn.model_selection import train_test_split
 from sklearn.linear_model import LogisticRegression
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.ensemble import RandomForestClassifier
+from sklearn.metrics import accuracy_score, confusion_matrix
+from scipy import stats
+from matplotlib import pyplot as plt
 import seaborn as sns
 import matplotlib.pyplot as plt
 
@@ -33,7 +33,7 @@ def timer(title):
 class WDBCFis:
     def __init__(self):
         self.random_state = 20
-        self.column_stats = {}
+
         self.X = None
         self.y = None
         self.X_train = None
@@ -42,14 +42,12 @@ class WDBCFis:
         self.y_train = None
         self.y_test = None
         self.y_predict = []
-        self.number_tests = 2
+
         self.ant = {}
-        self.astats = {}
         self.diagnosis = None
         self.rules = []
-        self.accuracy_score = 0
+        self.crisp_binary_threshold = 0
         self.system = None
-        self.max_iters = 100
 
         self.ops = {
             '&': operator.and_,
@@ -57,12 +55,13 @@ class WDBCFis:
         }
 
         self.tests = [[{'Antecedents': [{'PerimeterMax': {'mf': {'low': 'gaussmf',
-                                                                 'high': 'trimf'}}}]},
+                                                                 'high': 'gaussmf'}}}]},
                        {'Consequent': [{'Diagnosis': {'mf': {'benign': {'mf': 'trapmf',
-                                                                        'shape': [0, 10, 40, 50]},
+                                                                        'shape': [0, 5, 10, 15]},
                                                              'malignant': {'mf': 'trapmf',
-                                                                           'shape': [50, 60, 90, 100]}}}}]},
-                       {'Rules': [{'PerimeterMax': 'low', 'Consequent': 'benign'}]}],
+                                                                           'shape': [15, 50, 75, 100]}}}}]},
+                       {'Rules': [{'PerimeterMax': 'low', 'Consequent': 'benign'}]},
+                       {'CrispToBinaryThreshold': 37.48}],
                       [{'Antecedents': [{'PerimeterMax': {'mf': {'low': 'gaussmf',
                                                                  'high': 'gaussmf'}}},
                                         {'ConcavePointsMax': {'mf': {'low': 'gaussmf',
@@ -72,7 +71,8 @@ class WDBCFis:
                                                              'malignant': {'mf': 'trapmf',
                                                                            'shape': [50, 60, 90, 100]}}}}]},
                        {'Rules': [{'PerimeterMax': 'low', 'ConcavePointsMax': 'low', 'Antop': '&', 'Consequent': 'benign'},
-                                  {'PerimeterMax': 'high', 'ConcavePointsMax': 'high', 'Antop': '&', 'Consequent': 'malignant'}]}]]
+                                  {'PerimeterMax': 'high', 'ConcavePointsMax': 'high', 'Antop': '&', 'Consequent': 'malignant'}]},
+                       {'CrispToBinaryThreshold': 46}]]
 
         self.ant_cfg = []
         self.con_cfg = []
@@ -98,7 +98,6 @@ class WDBCFis:
                     self.ant = {}
                     self.diagnosis = None
                     self.rules = []
-                    self.accuracy_score = 0
 
                 with timer('\nCreating Antecedent Universe'):
                     self.create_antecendents_universe()
@@ -119,8 +118,11 @@ class WDBCFis:
                     self.system = ct.ControlSystem(rules=self.rules)
                     self.sim = ct.ControlSystemSimulation(self.system)
 
-                with timer('\nMaking Predictions'):
-                    self.predict()
+                with timer('\nMaking Model Predictions'):
+                    self.fis_model_predict_score(i)
+                    self.lr_model_predict_score(i)
+                    self.dtc_model_predict_score(i)
+                    self.rfc_model_predict_score(i)
 
     @staticmethod
     def feature_std(feat, df, target):
@@ -187,6 +189,8 @@ class WDBCFis:
                         if 'mf' in f[fk]:
                             for mfclass, mfshape in f[fk]['mf'].items():
                                 self.con_cfg.append({fk: (mfclass, mfshape)})
+            if 'CrispToBinaryThreshold' in cfg:
+                self.crisp_binary_threshold = cfg['CrispToBinaryThreshold']
 
     def set_X_train_test_cols(self):
         cols = []
@@ -224,6 +228,7 @@ class WDBCFis:
 
     def set_antecedents_stats(self, a):
         s = {}
+
         s['min0'] = self.feature_min(a, self.X_y_train, 0)
         s['min1'] = self.feature_min(a, self.X_y_train, 1)
 
@@ -255,7 +260,7 @@ class WDBCFis:
         t = str(self.transform_class_to_target(t))
         return fz.trimf(self.ant[a].universe, [s['min' + t], s['pke' + t], s['max' + t]])
 
-    def mf_trapfm(self, a, t, s):
+    def mf_trapmf(self, a, t, s):
         t = str(self.transform_class_to_target(t))
         return fz.trapmf(self.ant[a].universe, [s['min' + t], s['q25' + t], s['q75' + t], s['max' + t]])
 
@@ -292,50 +297,53 @@ class WDBCFis:
             r = ct.Rule(antecedent, consequent=consequent, label=label)
             self.rules.append(r)
 
-    def predict(self):
-        id = 0
-        sv = 0
+    def fis_model_predict_score(self, test_num):
+        test_num = str(test_num)
         y_pred = []
         for di, dr in self.X_test.iterrows():
             for si, sv in dr.iteritems():
                 self.sim.input[si] = sv
-                # if si == 'ID':
-                #     id = sv
-                # for rule in self.rules:
-                #     rule_str = str(rule)
-                #     if si in rule_str:
-                #         self.sim.input[si] = sv
             self.sim.compute()
-            output = {'CrispOut': self.sim.output['diagnosis'], 'BinaryOut': 0 if self.sim.output['diagnosis'] < 50 else 1}
+            output = {'CrispOut': self.sim.output['diagnosis'], 'BinaryOut': 0 if self.sim.output['diagnosis'] <
+                                                                                  self.crisp_binary_threshold else 1}
+            self.y_predict.append({'CrispOut': self.sim.output['diagnosis']})
             y_pred.append(output['BinaryOut'])
-            #self.y_predict.append(output)
 
-        # for r in self.y_predict:
-        #     print(r)
-        # for y in self.y_test:
-        #     print(y)
-        self.accuracy_score = accuracy_score(self.y_test, y_pred)
-        print('Accuracy ', self.accuracy_score)
-        self.confusion_matrix(self.y_test, y_pred, 'test')
+        acc = accuracy_score(self.y_test, y_pred)
+        print('Test ' + test_num + ' - FIS - Accuracy ' + str(acc))
+        self.confusion_matrix(self.y_test, y_pred, test_num, 'FIS')
+
         # JP see self.system.view_n() and see if useful, what it does
+        #self.system.view_n()
 
-    def logistic_regression_model(self):
-        lr = LogisticRegression(penalty='l2', solver='sag', max_iter=self.max_iters)
+    def lr_model_predict_score(self, test_num):
+        test_num = str(test_num)
+        lr = LogisticRegression(random_state=self.random_state)
         lr.fit(self.X_train, self.y_train)
         y_pred = lr.predict(self.X_test)
-        self.accuracy_score = accuracy_score(self.y_test, y_pred)
-        print('Accuracy ', self.accuracy_score)
+        acc = accuracy_score(self.y_test, y_pred)
+        print('Test ' + test_num + ' - LR - Accuracy ' + str(acc))
+        self.confusion_matrix(self.y_test, y_pred, test_num, 'LR')
 
-    def decision_tree_model(self):
+    def dtc_model_predict_score(self, test_num):
+        test_num = str(test_num)
         dtc = DecisionTreeClassifier(random_state=self.random_state)
         dtc.fit(self.X_train, self.y_train)
+        y_pred = dtc.predict(self.X_test)
+        acc = accuracy_score(self.y_test, y_pred)
+        print('Test ' + test_num + ' - DTC - Accuracy ' + str(acc))
+        self.confusion_matrix(self.y_test, y_pred, test_num, 'DTC')
 
-    def random_forect_model(self):
-        rfc = RandomForestClassifier(max_depth=2, random_state=self.random_state)
+    def rfc_model_predict_score(self, test_num):
+        test_num = str(test_num)
+        rfc = RandomForestClassifier(random_state=self.random_state)
         rfc.fit(self.X_train, self.y_train)
+        y_pred = rfc.predict(self.X_test)
+        acc = accuracy_score(self.y_test, y_pred)
+        print('Test ' + test_num + ' - RFC - Accuracy ' + str(acc))
+        self.confusion_matrix(self.y_test, y_pred, test_num, 'RFC')
 
-    def confusion_matrix(self, y, y_pred, title):
-        from sklearn.metrics import confusion_matrix
+    def confusion_matrix(self, y, y_pred, test_num, model_name):
         cm = confusion_matrix(y, y_pred)
         ax = plt.subplot()
         sns.heatmap(cm, annot=True, ax=ax, annot_kws={"size": 14}, fmt='d', cmap='Greens', cbar=False)
@@ -344,6 +352,7 @@ class WDBCFis:
         ax.set_title('Confusion Matrix')
         ax.xaxis.set_ticklabels(['Benign', 'Malignant'])
         ax.yaxis.set_ticklabels(['Benign', 'Malignant'])
+        plt.savefig(fname='plots/CM - test ' + test_num + ' - ' + model_name + '.png', dpi=300, format='png')
         plt.show()
 
 

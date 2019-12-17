@@ -46,13 +46,27 @@ class WDBCFis:
         self.system = None
         self.max_iters = 100
 
-        self.tests = [[{"Features": [{"PerimeterMax": {"mf": {"low": 'gaussmf',
-                                                              "high": 'trimf'}}}]}],
-                      [{"Features": [{"PerimeterMax": {"mf": {"low": 'gaussmf',
-                                                              "high": 'gaussmf'}}},
-                                     {"ConcavePointsMax": {"mf": {"low": 'gaussmf',
-                                                                  "high": 'gaussmf'}}}]}]]
-        self.test_cols = []
+        self.tests = [[{'Antecedents': [{'PerimeterMax': {'mf': {'low': 'gaussmf',
+                                                                 'high': 'trimf'}}}]},
+                       {'Consequent': [{'Diagnosis': {'mf': {'benign': {'mf': 'trapmf',
+                                                                        'shape': [0, 10, 40, 50]},
+                                                             'malignant': {'mf': 'trapmf',
+                                                                           'shape': [50, 60, 90, 100]}}}}]},
+                       {'Rules': [{'PerimeterMax': 'low', 'Consequent': 'benign'}]}],
+                      [{'Antecedents': [{'PerimeterMax': {'mf': {'low': 'gaussmf',
+                                                                 'high': 'gaussmf'}}},
+                                        {'ConcavePointsMax': {'mf': {'low': 'gaussmf',
+                                                                     'high': 'gaussmf'}}}]},
+                       {'Consequent': [{'Diagnosis': {'mf': {'benign': {'mf': 'trapmf',
+                                                                        'shape': [0, 10, 40, 50]},
+                                                             'malignant': {'mf': 'trapmf',
+                                                                           'shape': [50, 60, 90, 100]}}}}]},
+                       {'Rules': [[{'PerimeterMax': 'low', 'ConcavePointsMax': 'low', 'antop': '&', 'Consequent': 'benign'}],
+                                  [{'PerimeterMax': 'high', 'ConcavePointsMax': 'high', 'antop': '&', 'Consequent': 'malignant'}]]}]]
+
+        self.ant_cfg = []
+        self.con_cfg = []
+        self.rule_cfg = []
 
         with timer('\nLoad dataset'):
             self.load_data()
@@ -79,14 +93,17 @@ class WDBCFis:
                 with timer('\nCreating Antecedent Universe'):
                     self.create_antecendents_universe()
 
+                with timer('\nCreating Consequent Universe'):
+                    self.create_consequent_universe()
+
                 with timer('\nSetting Antecedent MFs'):
-                    self.set_test_antecendents_mfs(i)
+                    self.set_antecendents_mfs()
 
                 with timer('\nSetting Consequent'):
-                    self.set_test_consequent_mfs(i)
+                    self.set_consequent_mfs()
 
                 with timer('\nSetting Rules'):
-                    self.set_test_rules(i)
+                    self.set_test_rules(t)
 
                 with timer('\nSetting System'):
                     self.system = ct.ControlSystem(rules=self.rules)
@@ -96,23 +113,36 @@ class WDBCFis:
                     # Should lop through all test data here, store, defuzzify, compoare with ground truth
                     self.predict()
 
-    def set_test_cfg(self, t):
-        for cfg in t:
-            if 'Features' in cfg:
-                for f in cfg['Features']:
-                    for fk, fv in f.items():
-                        if 'mf' in f[fk]:
-                            for mfclass, mfshape in f[fk]['mf'].items():
-                                self.test_cols.append({fk: (mfclass, mfshape)})
+    @staticmethod
+    def feature_std(feat, df, target):
+        return df.loc[df['Diagnosis'] == target, feat].std()
 
-    def set_X_train_test_cols(self):
-        cols = []
-        for c in self.test_cols:
-            for k, v in c.items():
-                cols.append(k)
-        cols = list(set(cols))
-        self.X_train = self.X_train[cols]
-        self.X_test = self.X_test[cols]
+    @staticmethod
+    def feature_mean(feat, df, target):
+        return df.loc[df['Diagnosis'] == target, feat].mean()
+
+    @staticmethod
+    def feature_min(feat, df, target):
+        return df.loc[df['Diagnosis'] == target, feat].min()
+
+    @staticmethod
+    def feature_max(feat, df, target):
+        return df.loc[df['Diagnosis'] == target, feat].max()
+
+    @staticmethod
+    def feature_quantile(feat, df, target, q):
+        return df.loc[df['Diagnosis'] == target, feat].quantile(q)
+
+    @staticmethod
+    def feature_kde_peak(feat, df, target):
+        kernel = stats.gaussian_kde(df.loc[df['Diagnosis'] == target, feat])
+        universe = np.linspace(df[feat].min(), df[feat].max(), num=200)
+        kernel = kernel(universe)
+        return universe[np.argsort(kernel)[-1]]
+
+    @staticmethod
+    def transform_class_to_target(t):
+        return 0 if t == 'low' else 1
 
     def load_data(self):
         self.X = pd.read_csv('data/wdbc_selected_cols.csv')
@@ -134,6 +164,30 @@ class WDBCFis:
         # Used for MF shaping when feature distribution filtered by target
         self.X_y_train = pd.concat([self.X_train, self.y_train], axis=1)
 
+    def set_test_cfg(self, t):
+        for cfg in t:
+            if 'Antecedents' in cfg:
+                for f in cfg['Antecedents']:
+                    for fk, fv in f.items():
+                        if 'mf' in f[fk]:
+                            for mfclass, mfshape in f[fk]['mf'].items():
+                                self.ant_cfg.append({fk: (mfclass, mfshape)})
+            if 'Consequent' in cfg:
+                for f in cfg['Consequent']:
+                    for fk, fv in f.items():
+                        if 'mf' in f[fk]:
+                            for mfclass, mfshape in f[fk]['mf'].items():
+                                self.con_cfg.append({fk: (mfclass, mfshape)})
+
+    def set_X_train_test_cols(self):
+        cols = []
+        for c in self.ant_cfg:
+            for k, v in c.items():
+                cols.append(k)
+        cols = list(set(cols))
+        self.X_train = self.X_train[cols]
+        self.X_test = self.X_test[cols]
+
     def print_shape(self):
         print('\tRow count:\t', '{}'.format(self.X.shape[0]))
         print('\tColumn count:\t', '{}'.format(self.X.shape[1]))
@@ -143,11 +197,21 @@ class WDBCFis:
         for feat in self.X_train:
             self.ant[feat] = ct.Antecedent(np.linspace(self.X_train[feat].min(), self.X_train[feat].max(), num=200), feat)
 
-    def set_test_antecendents_mfs(self, test):
+    def create_consequent_universe(self):
+        self.diagnosis = ct.Consequent(np.arange(0, 100, 1), 'diagnosis')
+
+    def set_antecendents_mfs(self):
         # Diagnosis: Benign = class 0, Malignant = Class 1
         for a in self.ant:
             s = self.set_antecedents_stats(a)
-            self.set_antecedents_mfs_test(a, s)
+            self.set_antecedent_mfs(a, s)
+
+    def set_antecedent_mfs(self, a, s):
+        for c in self.ant_cfg:
+            for k, v in c.items():
+                if k == a:
+                    self.ant[a][v[0]] = getattr(self, 'mf_' + v[1])(a, v[0], s)
+        self.ant[a].view()
 
     def set_antecedents_stats(self, a):
         s = {}
@@ -174,56 +238,9 @@ class WDBCFis:
 
         return s
 
-    def set_antecedents_mfs_test(self, a, s):
-        for c in self.test_cols:
-            for k, v in c.items():
-                if k == a:
-                    self.ant[a][v[0]] = getattr(self, 'mf_' + v[1])(a, v[0], s)
-        self.ant[a].view()
-
-    # def set_antecedents_mfs_test_0(self, a, s):
-    #     #     # Low
-    #     #     self.ant[a]['low'] = fz.gaussmf(self.ant[a].universe, s['mean0'], s['std0'])
-    #     #
-    #     #     # High
-    #     #     self.ant[a]['high'] = fz.gaussmf(self.ant[a].universe, s['mean1'], s['std1'])
-    #     #
-    #     # def set_antecedents_mfs_test_1(self, a, s):
-    #     #     # Low risk
-    #     #     self.ant[a]['low'] = fz.gaussmf(self.ant[a].universe, s['mean0'], s['std0'])
-    #     #
-    #     #    # self.ant[a]['high'] = fz.gaussmf(self.ant[a].universe, mean_1, std_1)
-    #     #     #self.ant[a]['high'] = fz.trimf(self.ant[a].universe, [min_1, peak_1, max_1])
-    #     #     self.ant[a]['high'] = fz.trapmf(self.ant[a].universe, [s['min1'], s['q251'], s['q751'], s['max1']])
-    #     #     self.ant[a].view()
-
-    def feature_std(self, feat, df, target):
-        return df.loc[df['Diagnosis'] == target, feat].std()
-
-    def feature_mean(self, feat, df, target):
-        return df.loc[df['Diagnosis'] == target, feat].mean()
-
-    def feature_min(self, feat, df, target):
-        return df.loc[df['Diagnosis'] == target, feat].min()
-
-    def feature_max(self, feat, df, target):
-        return df.loc[df['Diagnosis'] == target, feat].max()
-
-    def feature_quantile(self, feat, df, target, q):
-        return df.loc[df['Diagnosis'] == target, feat].quantile(q)
-
-    def feature_kde_peak(self, feat, df, target):
-        kernel = stats.gaussian_kde(df.loc[df['Diagnosis'] == target, feat])
-        universe = np.linspace(df[feat].min(), df[feat].max(), num=200)
-        kernel = kernel(universe)
-        return universe[np.argsort(kernel)[-1]]
-
     def mf_gaussmf(self, a, t, s):
         t = str(self.transform_class_to_target(t))
         return fz.gaussmf(self.ant[a].universe, s['mean' + t], s['std' + t])
-
-    def transform_class_to_target(self, t):
-        return 0 if t == 'low' else 1
 
     def mf_trimf(self, a, t, s):
         t = str(self.transform_class_to_target(t))
@@ -233,23 +250,21 @@ class WDBCFis:
         t = str(self.transform_class_to_target(t))
         return fz.trapmf(self.ant[a].universe, [s['min' + t], s['q25' + t], s['q75' + t], s['max' + t]])
 
-    def set_test_consequent_mfs(self, test):
-        con_mfs_func = 'set_consequent_mfs_test_' + str(test)
-        getattr(self, con_mfs_func)()
+    def set_consequent_mfs(self):
+        for c in self.con_cfg:
+            for k, v in c.items():
+                self.diagnosis[v[0]] = getattr(fz, v[1]['mf'])(self.diagnosis.universe, v[1]['shape'])
 
-    def set_consequent_mfs_test_0(self):
-        self.diagnosis = ct.Consequent(np.arange(0, 100, 1), 'diagnosis')
-        self.diagnosis['benign'] = fz.trapmf(self.diagnosis.universe, [0, 10, 40, 50])
-        self.diagnosis['malignant'] = fz.trapmf(self.diagnosis.universe, [50, 60, 90, 100])
-
-    def set_consequent_mfs_test_1(self):
-        self.diagnosis = ct.Consequent(np.arange(0, 100, 1), 'diagnosis')
-        self.diagnosis['benign'] = fz.trapmf(self.diagnosis.universe, [0, 10, 40, 50])
-        self.diagnosis['malignant'] = fz.trapmf(self.diagnosis.universe, [50, 60, 90, 100])
+        self.diagnosis.view()
 
     def set_test_rules(self, test):
-        rules_func = 'set_rules_test_' + str(test)
-        getattr(self, rules_func)()
+        for r in test:
+            if 'Rules' in r:
+                self.add_rule(r['Rules'])
+
+    def add_rule(self, r):
+        for k, v in r:
+            print(k, r[k], v)
 
     def set_rules_test_0(self):
         r = ct.Rule(self.ant['PerimeterMax']['low'], consequent=self.diagnosis['benign'], label='Benign')
@@ -259,7 +274,9 @@ class WDBCFis:
         self.rules.append(r)
 
     def set_rules_test_1(self):
-        r = ct.Rule(self.ant['PerimeterMax']['low'] & self.ant['ConcavePointsMax']['low'],
+        test = self.ant['PerimeterMax']['low']
+        test = test | self.ant['ConcavePointsMax']['low']
+        r = ct.Rule(test,
                       consequent=self.diagnosis['benign'], label='Benign')
         self.rules.append(r)
 
@@ -269,6 +286,7 @@ class WDBCFis:
 
     def predict(self):
         id = 0
+        sv = 0
         y_pred = []
         for di, dr in self.X_test.iterrows():
             for si, sv in dr.iteritems():

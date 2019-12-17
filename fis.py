@@ -8,6 +8,9 @@ from skfuzzy import control as ct
 from sklearn.metrics import accuracy_score
 from scipy import stats
 from matplotlib import pyplot as plt
+from sklearn.linear_model import LogisticRegression
+from sklearn.tree import DecisionTreeClassifier
+from sklearn.ensemble import RandomForestClassifier
 
 # Skfuzzy API
 # https://scikit-fuzzy.readthedocs.io/en/latest/api/skfuzzy.html
@@ -36,12 +39,20 @@ class WDBCFis:
         self.y_predict = []
         self.number_tests = 2
         self.ant = {}
+        self.astats = {}
         self.diagnosis = None
         self.rules = []
         self.accuracy_score = 0
         self.system = None
+        self.max_iters = 100
 
-        #self.tests = [{'PerimeterMax': 'low', 'mf': 'trimf'}, {'trimf': 'high'}]
+        self.tests = [[{"Features": [{"PerimeterMax": {"mf": {"low": 'gaussmf',
+                                                              "high": 'gaussmf'}}}]}],
+                      [{"Features": [{"PerimeterMax": {"mf": {"low": 'gaussmf',
+                                                              "high": 'gaussmf'}}},
+                                     {"ConcavePointsMax": {"mf": {"low": 'gaussmf',
+                                                                  "high": 'gaussmf'}}}]}]]
+        self.test_cols = []
 
         with timer('\nLoad dataset'):
             self.load_data()
@@ -49,34 +60,61 @@ class WDBCFis:
         with timer('\nSplit dataset'):
             self.set_y()
             self.remove_target_from_X()
-            self.train_test_split()
-            self.set_X_y_train()
 
         with timer('\nSetting Antecedents Universe'):
             pass
 
-        for i in range(self.number_tests):
-            self.ant = {}
-            self.diagnosis = None
-            self.rules = []
-            self.accuracy_score = 0
-            self.create_antecendents_universe()
-            with timer('\nSetting Antecedent MFs'):
-                self.set_test_antecendents_mfs(i)
+            for i, t in enumerate(self.tests):
+                with timer('\nTest ' + str(i)):
+                    self.set_test_cfg(t)
 
-            with timer('\nSetting Consequent'):
-                self.set_test_consequent_mfs(i)
+                with timer('\nPreparing dataset for test '):
+                    self.train_test_split()
+                    self.set_X_train_test_cols()
+                    self.set_X_y_train()
 
-            with timer('\nSetting Rules'):
-                self.set_test_rules(i)
+                    self.ant = {}
+                    self.diagnosis = None
+                    self.rules = []
+                    self.accuracy_score = 0
 
-            with timer('\nSetting System'):
-                self.system = ct.ControlSystem(rules=self.rules)
-                self.sim = ct.ControlSystemSimulation(self.system)
+                with timer('\nCreating Antecedent Universe'):
+                    self.create_antecendents_universe()
 
-            with timer('\nMaking Predictions'):
-                # Should lop through all test data here, store, defuzzify, compoare with ground truth
-                self.predict()
+                with timer('\nSetting Antecedent MFs'):
+                    self.set_test_antecendents_mfs(i)
+
+                with timer('\nSetting Consequent'):
+                    self.set_test_consequent_mfs(i)
+
+                with timer('\nSetting Rules'):
+                    self.set_test_rules(i)
+
+                with timer('\nSetting System'):
+                    self.system = ct.ControlSystem(rules=self.rules)
+                    self.sim = ct.ControlSystemSimulation(self.system)
+
+                with timer('\nMaking Predictions'):
+                    # Should lop through all test data here, store, defuzzify, compoare with ground truth
+                    self.predict()
+
+    def set_test_cfg(self, t):
+        for cfg in t:
+            if 'Features' in cfg:
+                for f in cfg['Features']:
+                    for fk, fv in f.items():
+                        if 'mf' in f[fk]:
+                            for mfclass, mfshape in f[fk]['mf'].items():
+                                self.test_cols.append({fk: (mfclass, mfshape)})
+
+    def set_X_train_test_cols(self):
+        cols = []
+        for c in self.test_cols:
+            for k, v in c.items():
+                cols.append(k)
+        cols = list(set(cols))
+        self.X_train = self.X_train[cols]
+        self.X_test = self.X_test[cols]
 
     def load_data(self):
         self.X = pd.read_csv('data/wdbc_selected_cols.csv')
@@ -104,57 +142,66 @@ class WDBCFis:
 
     def create_antecendents_universe(self):
         # Set universe boundary for each feature
-        for feat in self.X:
-            if feat == 'ID':
-                continue
-            self.ant[feat] = ct.Antecedent(np.linspace(self.X[feat].min(), self.X[feat].max(), num=200), feat)
+        for feat in self.X_train:
+            self.ant[feat] = ct.Antecedent(np.linspace(self.X_train[feat].min(), self.X_train[feat].max(), num=200), feat)
 
     def set_test_antecendents_mfs(self, test):
         # Diagnosis: Benign = class 0, Malignant = Class 1
         for a in self.ant:
+            s = self.set_antecedents_stats(a)
             ant_mfs_func = 'set_antecedents_mfs_test_' + str(test)
-            getattr(self, ant_mfs_func)(a)
 
-    def set_antecedents_mfs_test_0(self, a):
-        mean_0 = self.X_y_train.loc[self.X_y_train['Diagnosis'] == 0, a].mean()
-        std_0 = self.X_y_train.loc[self.X_y_train['Diagnosis'] == 0, a].std()
-        mean_1 = self.X_y_train.loc[self.X_y_train['Diagnosis'] == 1, a].mean()
-        std_1 = self.X_y_train.loc[self.X_y_train['Diagnosis'] == 1, a].std()
+            getattr(self, ant_mfs_func)(a, s)
 
+    def set_antecedents_stats(self, a):
+        s = {}
+        s['min0'] = self.feature_min(a, self.X_y_train, 0)
+        s['min1'] = self.feature_min(a, self.X_y_train, 1)
+
+        s['max0'] = self.feature_max(a, self.X_y_train, 0)
+        s['max1'] = self.feature_max(a, self.X_y_train, 1)
+
+        s['mean0'] = self.feature_mean(a, self.X_y_train, 0)
+        s['mean1'] = self.feature_mean(a, self.X_y_train, 1)
+
+        s['std0'] = self.feature_std(a, self.X_y_train, 0)
+        s['std1'] = self.feature_std(a, self.X_y_train, 1)
+
+        s['q250'] = self.feature_quantile(a, self.X_y_train, 0, 0.25)
+        s['q251'] = self.feature_quantile(a, self.X_y_train, 1, 0.25)
+
+        s['q750'] = self.feature_quantile(a, self.X_y_train, 0, 0.75)
+        s['q751'] = self.feature_quantile(a, self.X_y_train, 1, 0.75)
+
+        s['pke0'] = self.feature_kde_peak(a, self.X_y_train, 0)
+        s['pke1'] = self.feature_kde_peak(a, self.X_y_train, 1)
+
+        return s
+
+    def set_antecedents_mfs_test_0(self, a, s):
+        # Low
+        self.ant[a]['low'] = fz.gaussmf(self.ant[a].universe, s['mean0'], s['std0'])
+
+        # High
+        self.ant[a]['high'] = fz.gaussmf(self.ant[a].universe, s['mean1'], s['std1'])
+
+    def set_antecedents_mfs_test_1(self, a, s):
         # Low risk
-        self.ant[a]['low'] = fz.gaussmf(self.ant[a].universe, mean_0, std_0)
-
-        # High risk
-        self.ant[a]['high'] = fz.gaussmf(self.ant[a].universe, mean_1, std_1)
-
-    def set_antecedents_mfs_test_1(self, a):
-        mean_0 = self.X_y_train.loc[self.X_y_train['Diagnosis'] == 0, a].mean()
-        std_0 = self.X_y_train.loc[self.X_y_train['Diagnosis'] == 0, a].std()
-        mean_1 = self.X_y_train.loc[self.X_y_train['Diagnosis'] == 1, a].mean()
-        min_1 = self.X_y_train.loc[self.X_y_train['Diagnosis'] == 1, a].min()
-        max_1 = self.X_y_train.loc[self.X_y_train['Diagnosis'] == 1, a].max()
-        std_1 = self.X_y_train.loc[self.X_y_train['Diagnosis'] == 1, a].std()
-        peak_1 = self.feature_kde_peak(a, self.X_y_train, 1)
-        q25_1 = self.X_y_train.loc[self.X_y_train['Diagnosis'] == 1, a].quantile(.25)
-        q75_1 = self.X_y_train.loc[self.X_y_train['Diagnosis'] == 1, a].quantile(.75)
-
-        # Low risk
-        self.ant[a]['low'] = fz.gaussmf(self.ant[a].universe, mean_0, std_0)
-
-        # High risk
-        from scipy import stats
-        kernel = stats.gaussian_kde(self.X_y_train.loc[self.X_y_train['Diagnosis'] == 1, a])
-        x = np.linspace(self.X[a].min(), self.X[a].max(), num=200)
-        kernel = kernel(x)
-        peak = x[np.argsort(kernel)[-1]]
+        self.ant[a]['low'] = fz.gaussmf(self.ant[a].universe, s['mean0'], s['std0'])
 
        # self.ant[a]['high'] = fz.gaussmf(self.ant[a].universe, mean_1, std_1)
         #self.ant[a]['high'] = fz.trimf(self.ant[a].universe, [min_1, peak_1, max_1])
-        self.ant[a]['high'] = fz.trapmf(self.ant[a].universe, [min_1, q25_1, q75_1, max_1])
+        self.ant[a]['high'] = fz.trapmf(self.ant[a].universe, [s['min1'], s['q251'], s['q751'], s['max1']])
         self.ant[a].view()
+
+    def feature_std(self, feat, df, target):
+        return df.loc[df['Diagnosis'] == target, feat].std()
 
     def feature_mean(self, feat, df, target):
         return df.loc[df['Diagnosis'] == target, feat].mean()
+
+    def feature_min(self, feat, df, target):
+        return df.loc[df['Diagnosis'] == target, feat].min()
 
     def feature_max(self, feat, df, target):
         return df.loc[df['Diagnosis'] == target, feat].max()
@@ -225,5 +272,21 @@ class WDBCFis:
         self.accuracy_score = accuracy_score(self.y_test, y_pred)
         print('Accuracy ', self.accuracy_score)
         # JP see self.system.view_n() and see if useful, what it does
+
+    def logistic_regression_model(self):
+        lr = LogisticRegression(penalty='l2', solver='sag', max_iter=self.max_iters)
+        lr.fit(self.X_train, self.y_train)
+        y_pred = lr.predict(self.X_test)
+        self.accuracy_score = accuracy_score(self.y_test, y_pred)
+        print('Accuracy ', self.accuracy_score)
+
+    def decision_tree_model(self):
+        dtc = DecisionTreeClassifier(random_state=self.random_state)
+        dtc.fit(self.X_train, self.y_train)
+
+    def random_forect_model(self):
+        rfc = RandomForestClassifier(max_depth=2, random_state=self.random_state)
+        rfc.fit(self.X_train, self.y_train)
+
 
 wdbcFis = WDBCFis()

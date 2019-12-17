@@ -47,7 +47,7 @@ class WDBCFis:
         self.max_iters = 100
 
         self.tests = [[{"Features": [{"PerimeterMax": {"mf": {"low": 'gaussmf',
-                                                              "high": 'gaussmf'}}}]}],
+                                                              "high": 'trimf'}}}]}],
                       [{"Features": [{"PerimeterMax": {"mf": {"low": 'gaussmf',
                                                               "high": 'gaussmf'}}},
                                      {"ConcavePointsMax": {"mf": {"low": 'gaussmf',
@@ -62,8 +62,6 @@ class WDBCFis:
             self.remove_target_from_X()
 
         with timer('\nSetting Antecedents Universe'):
-            pass
-
             for i, t in enumerate(self.tests):
                 with timer('\nTest ' + str(i)):
                     self.set_test_cfg(t)
@@ -149,9 +147,7 @@ class WDBCFis:
         # Diagnosis: Benign = class 0, Malignant = Class 1
         for a in self.ant:
             s = self.set_antecedents_stats(a)
-            ant_mfs_func = 'set_antecedents_mfs_test_' + str(test)
-
-            getattr(self, ant_mfs_func)(a, s)
+            self.set_antecedents_mfs_test(a, s)
 
     def set_antecedents_stats(self, a):
         s = {}
@@ -178,21 +174,28 @@ class WDBCFis:
 
         return s
 
-    def set_antecedents_mfs_test_0(self, a, s):
-        # Low
-        self.ant[a]['low'] = fz.gaussmf(self.ant[a].universe, s['mean0'], s['std0'])
-
-        # High
-        self.ant[a]['high'] = fz.gaussmf(self.ant[a].universe, s['mean1'], s['std1'])
-
-    def set_antecedents_mfs_test_1(self, a, s):
-        # Low risk
-        self.ant[a]['low'] = fz.gaussmf(self.ant[a].universe, s['mean0'], s['std0'])
-
-       # self.ant[a]['high'] = fz.gaussmf(self.ant[a].universe, mean_1, std_1)
-        #self.ant[a]['high'] = fz.trimf(self.ant[a].universe, [min_1, peak_1, max_1])
-        self.ant[a]['high'] = fz.trapmf(self.ant[a].universe, [s['min1'], s['q251'], s['q751'], s['max1']])
+    def set_antecedents_mfs_test(self, a, s):
+        for c in self.test_cols:
+            for k, v in c.items():
+                if k == a:
+                    self.ant[a][v[0]] = getattr(self, 'mf_' + v[1])(a, v[0], s)
         self.ant[a].view()
+
+    # def set_antecedents_mfs_test_0(self, a, s):
+    #     #     # Low
+    #     #     self.ant[a]['low'] = fz.gaussmf(self.ant[a].universe, s['mean0'], s['std0'])
+    #     #
+    #     #     # High
+    #     #     self.ant[a]['high'] = fz.gaussmf(self.ant[a].universe, s['mean1'], s['std1'])
+    #     #
+    #     # def set_antecedents_mfs_test_1(self, a, s):
+    #     #     # Low risk
+    #     #     self.ant[a]['low'] = fz.gaussmf(self.ant[a].universe, s['mean0'], s['std0'])
+    #     #
+    #     #    # self.ant[a]['high'] = fz.gaussmf(self.ant[a].universe, mean_1, std_1)
+    #     #     #self.ant[a]['high'] = fz.trimf(self.ant[a].universe, [min_1, peak_1, max_1])
+    #     #     self.ant[a]['high'] = fz.trapmf(self.ant[a].universe, [s['min1'], s['q251'], s['q751'], s['max1']])
+    #     #     self.ant[a].view()
 
     def feature_std(self, feat, df, target):
         return df.loc[df['Diagnosis'] == target, feat].std()
@@ -214,6 +217,21 @@ class WDBCFis:
         universe = np.linspace(df[feat].min(), df[feat].max(), num=200)
         kernel = kernel(universe)
         return universe[np.argsort(kernel)[-1]]
+
+    def mf_gaussmf(self, a, t, s):
+        t = str(self.transform_class_to_target(t))
+        return fz.gaussmf(self.ant[a].universe, s['mean' + t], s['std' + t])
+
+    def transform_class_to_target(self, t):
+        return 0 if t == 'low' else 1
+
+    def mf_trimf(self, a, t, s):
+        t = str(self.transform_class_to_target(t))
+        return fz.trimf(self.ant[a].universe, [s['min' + t], s['pke' + t], s['max' + t]])
+
+    def mf_trapfm(self, a, t, s):
+        t = str(self.transform_class_to_target(t))
+        return fz.trapmf(self.ant[a].universe, [s['min' + t], s['q25' + t], s['q75' + t], s['max' + t]])
 
     def set_test_consequent_mfs(self, test):
         con_mfs_func = 'set_consequent_mfs_test_' + str(test)

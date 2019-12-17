@@ -1,5 +1,7 @@
 import time
 from contextlib import contextmanager
+import collections
+import operator
 import pandas as pd
 import numpy as np
 from sklearn.model_selection import train_test_split
@@ -11,6 +13,9 @@ from matplotlib import pyplot as plt
 from sklearn.linear_model import LogisticRegression
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.ensemble import RandomForestClassifier
+import seaborn as sns
+import matplotlib.pyplot as plt
+
 
 # Skfuzzy API
 # https://scikit-fuzzy.readthedocs.io/en/latest/api/skfuzzy.html
@@ -46,6 +51,11 @@ class WDBCFis:
         self.system = None
         self.max_iters = 100
 
+        self.ops = {
+            '&': operator.and_,
+            '|': operator.or_
+        }
+
         self.tests = [[{'Antecedents': [{'PerimeterMax': {'mf': {'low': 'gaussmf',
                                                                  'high': 'trimf'}}}]},
                        {'Consequent': [{'Diagnosis': {'mf': {'benign': {'mf': 'trapmf',
@@ -61,8 +71,8 @@ class WDBCFis:
                                                                         'shape': [0, 10, 40, 50]},
                                                              'malignant': {'mf': 'trapmf',
                                                                            'shape': [50, 60, 90, 100]}}}}]},
-                       {'Rules': [[{'PerimeterMax': 'low', 'ConcavePointsMax': 'low', 'antop': '&', 'Consequent': 'benign'}],
-                                  [{'PerimeterMax': 'high', 'ConcavePointsMax': 'high', 'antop': '&', 'Consequent': 'malignant'}]]}]]
+                       {'Rules': [{'PerimeterMax': 'low', 'ConcavePointsMax': 'low', 'Antop': '&', 'Consequent': 'benign'},
+                                  {'PerimeterMax': 'high', 'ConcavePointsMax': 'high', 'Antop': '&', 'Consequent': 'malignant'}]}]]
 
         self.ant_cfg = []
         self.con_cfg = []
@@ -103,14 +113,13 @@ class WDBCFis:
                     self.set_consequent_mfs()
 
                 with timer('\nSetting Rules'):
-                    self.set_test_rules(t)
+                    self.set_rules(t)
 
-                with timer('\nSetting System'):
+                with timer('\nSetting FIS System'):
                     self.system = ct.ControlSystem(rules=self.rules)
                     self.sim = ct.ControlSystemSimulation(self.system)
 
                 with timer('\nMaking Predictions'):
-                    # Should lop through all test data here, store, defuzzify, compoare with ground truth
                     self.predict()
 
     @staticmethod
@@ -257,32 +266,31 @@ class WDBCFis:
 
         self.diagnosis.view()
 
-    def set_test_rules(self, test):
+    def set_rules(self, test):
         for r in test:
             if 'Rules' in r:
-                self.add_rule(r['Rules'])
+                self.add_rules(r['Rules'])
 
-    def add_rule(self, r):
-        for k, v in r:
-            print(k, r[k], v)
-
-    def set_rules_test_0(self):
-        r = ct.Rule(self.ant['PerimeterMax']['low'], consequent=self.diagnosis['benign'], label='Benign')
-        self.rules.append(r)
-
-        r = ct.Rule(self.ant['PerimeterMax']['high'], consequent=self.diagnosis['malignant'], label='Malignant')
-        self.rules.append(r)
-
-    def set_rules_test_1(self):
-        test = self.ant['PerimeterMax']['low']
-        test = test | self.ant['ConcavePointsMax']['low']
-        r = ct.Rule(test,
-                      consequent=self.diagnosis['benign'], label='Benign')
-        self.rules.append(r)
-
-        r = ct.Rule(self.ant['PerimeterMax']['high'] & self.ant['ConcavePointsMax']['high'],
-                      consequent=self.diagnosis['malignant'], label='Malignant')
-        self.rules.append(r)
+    def add_rules(self, rules):
+        for r in rules:
+            antecedent = None
+            consequent = None
+            label = None
+            op_func = None
+            od = collections.OrderedDict(sorted(r.items()))
+            for arg in od.items():
+                if arg[0] == 'Consequent':
+                    consequent = self.diagnosis[arg[1]]
+                    label = arg[1]
+                elif arg[0] == 'Antop':
+                    op_func = self.ops[arg[1]]
+                else:
+                    if antecedent is None:
+                        antecedent = self.ant[arg[0]][arg[1]]
+                    else:
+                        antecedent = op_func(antecedent, self.ant[arg[0]][arg[1]])
+            r = ct.Rule(antecedent, consequent=consequent, label=label)
+            self.rules.append(r)
 
     def predict(self):
         id = 0
@@ -290,23 +298,25 @@ class WDBCFis:
         y_pred = []
         for di, dr in self.X_test.iterrows():
             for si, sv in dr.iteritems():
-                if si == 'ID':
-                    id = sv
-                for rule in self.rules:
-                    rule_str = str(rule)
-                    if si in rule_str:
-                        self.sim.input[si] = sv
+                self.sim.input[si] = sv
+                # if si == 'ID':
+                #     id = sv
+                # for rule in self.rules:
+                #     rule_str = str(rule)
+                #     if si in rule_str:
+                #         self.sim.input[si] = sv
             self.sim.compute()
-            output = {'ID': sv, 'FuzzyOut': self.sim.output['diagnosis'], 'CrispOut': 0 if self.sim.output['diagnosis'] < 50 else 1}
-            y_pred.append(output['CrispOut'])
-            self.y_predict.append(output)
+            output = {'CrispOut': self.sim.output['diagnosis'], 'BinaryOut': 0 if self.sim.output['diagnosis'] < 50 else 1}
+            y_pred.append(output['BinaryOut'])
+            #self.y_predict.append(output)
 
-        for r in self.y_predict:
-            print(r)
-        for y in self.y_test:
-            print(y)
+        # for r in self.y_predict:
+        #     print(r)
+        # for y in self.y_test:
+        #     print(y)
         self.accuracy_score = accuracy_score(self.y_test, y_pred)
         print('Accuracy ', self.accuracy_score)
+        self.confusion_matrix(self.y_test, y_pred, 'test')
         # JP see self.system.view_n() and see if useful, what it does
 
     def logistic_regression_model(self):
@@ -323,6 +333,18 @@ class WDBCFis:
     def random_forect_model(self):
         rfc = RandomForestClassifier(max_depth=2, random_state=self.random_state)
         rfc.fit(self.X_train, self.y_train)
+
+    def confusion_matrix(self, y, y_pred, title):
+        from sklearn.metrics import confusion_matrix
+        cm = confusion_matrix(y, y_pred)
+        ax = plt.subplot()
+        sns.heatmap(cm, annot=True, ax=ax, annot_kws={"size": 14}, fmt='d', cmap='Greens', cbar=False)
+        ax.set_xlabel('Predicted Class')
+        ax.set_ylabel('True Class')
+        ax.set_title('Confusion Matrix')
+        ax.xaxis.set_ticklabels(['Benign', 'Malignant'])
+        ax.yaxis.set_ticklabels(['Benign', 'Malignant'])
+        plt.show()
 
 
 wdbcFis = WDBCFis()

@@ -54,25 +54,26 @@ class WDBCFis:
             '|': operator.or_
         }
 
-        self.tests = [[{'Antecedents': [{'PerimeterMax': {'mf': {'low': 'gaussmf',
+        self.tests = [[{'Config': [{'Enabled': False, 'CrispToBinaryThreshold': 37.48}]},
+                       {'Antecedents': [{'PerimeterMax': {'mf': {'low': 'gaussmf',
                                                                  'high': 'gaussmf'}}}]},
                        {'Consequent': [{'Diagnosis': {'mf': {'benign': {'mf': 'trapmf',
-                                                                        'shape': [0, 5, 10, 15]},
+                                                                        'shape': [0, 10, 20, 30]},
                                                              'malignant': {'mf': 'trapmf',
-                                                                           'shape': [15, 50, 75, 100]}}}}]},
-                       {'Rules': [{'PerimeterMax': 'low', 'Consequent': 'benign'}]},
-                       {'CrispToBinaryThreshold': 37.48}],
-                      [{'Antecedents': [{'PerimeterMax': {'mf': {'low': 'gaussmf',
-                                                                 'high': 'gaussmf'}}},
-                                        {'ConcavePointsMax': {'mf': {'low': 'gaussmf',
+                                                                           'shape': [30, 100, 150, 200]}}}}]},
+                       {'Rules': [{'PerimeterMax': 'low', 'Diagnosis': 'benign'},
+                                  {'PerimeterMax': 'high', 'Diagnosis': 'malignant'}]}],
+                      [{'Config': [{'Enabled': True, 'CrispToBinaryThreshold': 46}]},
+                       {'Antecedents': [{'PerimeterMax': {'mf': {'low': 'trimf',
+                                                                 'high': 'trapmf'}}},
+                                        {'ConcavePointsMax': {'mf': {'low': 'trimf',
                                                                      'high': 'gaussmf'}}}]},
                        {'Consequent': [{'Diagnosis': {'mf': {'benign': {'mf': 'trapmf',
-                                                                        'shape': [0, 10, 40, 50]},
+                                                                        'shape': [0, 20, 100, 120]},
                                                              'malignant': {'mf': 'trapmf',
-                                                                           'shape': [50, 60, 90, 100]}}}}]},
-                       {'Rules': [{'PerimeterMax': 'low', 'ConcavePointsMax': 'low', 'Antop': '&', 'Consequent': 'benign'},
-                                  {'PerimeterMax': 'high', 'ConcavePointsMax': 'high', 'Antop': '&', 'Consequent': 'malignant'}]},
-                       {'CrispToBinaryThreshold': 46}]]
+                                                                           'shape': [80, 100, 180, 200]}}}}]},
+                       {'Rules': [{'PerimeterMax': 'low', 'ConcavePointsMax': 'low', 'Antop': '&', 'Diagnosis': 'benign'},
+                                  {'PerimeterMax': 'high', 'ConcavePointsMax': 'high', 'Antop': '&', 'Diagnosis': 'malignant'}]}]]
 
         self.ant_cfg = []
         self.con_cfg = []
@@ -87,6 +88,9 @@ class WDBCFis:
 
         with timer('\nSetting Antecedents Universe'):
             for i, t in enumerate(self.tests):
+                if not t[0]['Config'][0]['Enabled']:
+                    continue
+
                 with timer('\nTest ' + str(i)):
                     self.set_test_cfg(t)
 
@@ -116,7 +120,7 @@ class WDBCFis:
 
                 with timer('\nSetting FIS System'):
                     self.system = ct.ControlSystem(rules=self.rules)
-                    self.sim = ct.ControlSystemSimulation(self.system)
+                    self.diagnose = ct.ControlSystemSimulation(self.system)
 
                 with timer('\nMaking Model Predictions'):
                     self.fis_model_predict_score(i)
@@ -176,6 +180,8 @@ class WDBCFis:
         self.X_y_train = pd.concat([self.X_train, self.y_train], axis=1)
 
     def set_test_cfg(self, t):
+        self.crisp_binary_threshold = t[0]['Config'][0]['CrispToBinaryThreshold']
+
         for cfg in t:
             if 'Antecedents' in cfg:
                 for f in cfg['Antecedents']:
@@ -189,8 +195,6 @@ class WDBCFis:
                         if 'mf' in f[fk]:
                             for mfclass, mfshape in f[fk]['mf'].items():
                                 self.con_cfg.append({fk: (mfclass, mfshape)})
-            if 'CrispToBinaryThreshold' in cfg:
-                self.crisp_binary_threshold = cfg['CrispToBinaryThreshold']
 
     def set_X_train_test_cols(self):
         cols = []
@@ -208,10 +212,12 @@ class WDBCFis:
     def create_antecendents_universe(self):
         # Set universe boundary for each feature
         for feat in self.X_train:
-            self.ant[feat] = ct.Antecedent(np.linspace(self.X_train[feat].min(), self.X_train[feat].max(), num=200), feat)
+            self.ant[feat] = ct.Antecedent(np.linspace(self.X_train[feat].min() - (self.X_train[feat].std() * 1.1),
+                                                       self.X_train[feat].max() + (self.X_train[feat].std() * 1.1),
+                                                       num=200), feat)
 
     def create_consequent_universe(self):
-        self.diagnosis = ct.Consequent(np.arange(0, 100, 1), 'diagnosis')
+        self.diagnosis = ct.Consequent(np.arange(0, 200, 1), 'diagnosis')
 
     def set_antecendents_mfs(self):
         # Diagnosis: Benign = class 0, Malignant = Class 1
@@ -229,24 +235,18 @@ class WDBCFis:
     def set_antecedents_stats(self, a):
         s = {}
 
-        s['min0'] = self.feature_min(a, self.X_y_train, 0)
-        s['min1'] = self.feature_min(a, self.X_y_train, 1)
-
-        s['max0'] = self.feature_max(a, self.X_y_train, 0)
-        s['max1'] = self.feature_max(a, self.X_y_train, 1)
-
-        s['mean0'] = self.feature_mean(a, self.X_y_train, 0)
-        s['mean1'] = self.feature_mean(a, self.X_y_train, 1)
-
         s['std0'] = self.feature_std(a, self.X_y_train, 0)
         s['std1'] = self.feature_std(a, self.X_y_train, 1)
-
+        s['min0'] = self.feature_min(a, self.X_y_train, 0) - (s['std0'] * 1.1)
+        s['min1'] = self.feature_min(a, self.X_y_train, 1) - (s['std1'] * 1.1)
+        s['max0'] = self.feature_max(a, self.X_y_train, 0) + (s['std0'] * 1.1)
+        s['max1'] = self.feature_max(a, self.X_y_train, 1) + (s['std1'] * 1.1)
+        s['mean0'] = self.feature_mean(a, self.X_y_train, 0)
+        s['mean1'] = self.feature_mean(a, self.X_y_train, 1)
         s['q250'] = self.feature_quantile(a, self.X_y_train, 0, 0.25)
         s['q251'] = self.feature_quantile(a, self.X_y_train, 1, 0.25)
-
         s['q750'] = self.feature_quantile(a, self.X_y_train, 0, 0.75)
         s['q751'] = self.feature_quantile(a, self.X_y_train, 1, 0.75)
-
         s['pke0'] = self.feature_kde_peak(a, self.X_y_train, 0)
         s['pke1'] = self.feature_kde_peak(a, self.X_y_train, 1)
 
@@ -282,9 +282,9 @@ class WDBCFis:
             consequent = None
             label = None
             op_func = None
-            od = collections.OrderedDict(sorted(r.items()))
+            od = collections.OrderedDict(sorted(r.items()))  # Required to ensure operator determined first
             for arg in od.items():
-                if arg[0] == 'Consequent':
+                if arg[0] == 'Diagnosis':
                     consequent = self.diagnosis[arg[1]]
                     label = arg[1]
                 elif arg[0] == 'Antop':
@@ -302,12 +302,31 @@ class WDBCFis:
         y_pred = []
         for di, dr in self.X_test.iterrows():
             for si, sv in dr.iteritems():
-                self.sim.input[si] = sv
-            self.sim.compute()
-            output = {'CrispOut': self.sim.output['diagnosis'], 'BinaryOut': 0 if self.sim.output['diagnosis'] <
-                                                                                  self.crisp_binary_threshold else 1}
-            self.y_predict.append({'CrispOut': self.sim.output['diagnosis']})
+                self.diagnose.input[si] = sv
+            try:
+                self.diagnose.compute()
+                self.diagnosis.view(sim=self.diagnose)
+            except ValueError:
+                print(self.diagnose.input)
+                continue
+
+            crisp_to_binary = 0 if self.diagnose.output['diagnosis'] < self.crisp_binary_threshold else 1
+
+            output = {'CrispOut': self.diagnose.output['diagnosis'], 'BinaryOut': crisp_to_binary}
+            self.y_predict.append({'CrispOut': self.diagnose.output['diagnosis']})
             y_pred.append(output['BinaryOut'])
+            print(self.diagnose.output)
+            ants = [i for i in self.diagnose.ctrl.antecedents]
+            #ant = ants[0]
+            for ant in ants:
+                for t in ant.terms:
+                    print(ant.label, t, ant.terms[t].membership_value[self.diagnose])
+                    for t in ant.terms:
+                        print(ant.label, t, ant.terms[t].membership_value[self.diagnose])
+            #print(['For term \'{0}\' membership is {1}'.format(label, term.membership_value[self.diagnose])
+            #       for (label, term) in ant.terms.iteritems()])
+            #self.diagnose.print_state()
+
 
         acc = accuracy_score(self.y_test, y_pred)
         print('Test ' + test_num + ' - FIS - Accuracy ' + str(acc))

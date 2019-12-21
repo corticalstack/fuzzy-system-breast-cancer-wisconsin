@@ -54,26 +54,60 @@ class WDBCFis:
             '|': operator.or_
         }
 
-        self.tests = [[{'Config': [{'Enabled': False, 'CrispToBinaryThreshold': 37.48}]},
-                       {'Antecedents': [{'PerimeterMax': {'mf': {'low': 'gaussmf',
-                                                                 'high': 'gaussmf'}}}]},
-                       {'Consequent': [{'Diagnosis': {'mf': {'benign': {'mf': 'trapmf',
-                                                                        'shape': [0, 10, 20, 30]},
-                                                             'malignant': {'mf': 'trapmf',
-                                                                           'shape': [30, 100, 150, 200]}}}}]},
-                       {'Rules': [{'PerimeterMax': 'low', 'Diagnosis': 'benign'},
-                                  {'PerimeterMax': 'high', 'Diagnosis': 'malignant'}]}],
-                      [{'Config': [{'Enabled': True, 'CrispToBinaryThreshold': 46}]},
+        self.tests = [[{'Config': [{'Enabled': False, 'CrispToBinaryThreshold': 119, 'DefuzzifyMethod': 'centroid'}]},
                        {'Antecedents': [{'PerimeterMax': {'mf': {'low': 'trimf',
                                                                  'high': 'trapmf'}}},
                                         {'ConcavePointsMax': {'mf': {'low': 'trimf',
                                                                      'high': 'gaussmf'}}}]},
-                       {'Consequent': [{'Diagnosis': {'mf': {'benign': {'mf': 'trapmf',
-                                                                        'shape': [0, 20, 100, 120]},
-                                                             'malignant': {'mf': 'trapmf',
-                                                                           'shape': [80, 100, 180, 200]}}}}]},
+                       {'Consequent': [{'Diagnosis': {'mf': [{'benign': ['zmf', [10, 170]]},
+                                                             {'malignant': ['smf', [100, 200]]}]}}]},
                        {'Rules': [{'PerimeterMax': 'low', 'ConcavePointsMax': 'low', 'Antop': '&', 'Diagnosis': 'benign'},
-                                  {'PerimeterMax': 'high', 'ConcavePointsMax': 'high', 'Antop': '&', 'Diagnosis': 'malignant'}]}]]
+                                  {'PerimeterMax': 'high', 'ConcavePointsMax': 'high', 'Antop': '&', 'Diagnosis': 'malignant'}]}],
+                      [{'Config': [{'Enabled': False, 'CrispToBinaryThreshold': 119, 'DefuzzifyMethod': 'centroid'}]},
+                       {'Antecedents': [{'AreaSe': {'mf': {'low': 'gaussmf',
+                                                                 'high': 'gaussmf'}}},
+                                        {'SmoothnessMax': {'mf': {'low': 'gaussmf',
+                                                                     'high': 'gaussmf'}}}]},
+                       {'Consequent': [{'Diagnosis': {'mf': [{'benign': ['zmf', [10, 170]]},
+                                                             {'malignant': ['smf', [100, 200]]}]}}]},
+                       {'Rules': [
+                           {'AreaSe': 'low', 'SmoothnessMax': 'low', 'Antop': '&', 'Diagnosis': 'benign'},
+                           {'AreaSe': 'high', 'SmoothnessMax': 'high', 'Antop': '&', 'Diagnosis': 'malignant'}]}],
+                      [{'Config': [{'Enabled': False, 'CrispToBinaryThreshold': 119, 'DefuzzifyMethod': 'centroid'}]},
+                       {'Antecedents': [{'PerimeterMax': {'mf': {'low': 'trimf',
+                                                                 'high': 'trapmf'}}},
+                                        {'ConcavePointsMax': {'mf': {'low': 'trimf',
+                                                                     'high': 'gaussmf'}}},
+                                        {'AreaSe': {'mf': {'low': 'gaussmf',
+                                                           'high': 'gaussmf'}}},
+                                        {'SmoothnessMax': {'mf': {'low': 'gaussmf',
+                                                                  'high': 'gaussmf'}}}]},
+                       {'Consequent': [{'Diagnosis': {'mf': [{'benign': ['zmf', [10, 170]]},
+                                                             {'malignant': ['smf', [100, 200]]}]}}]},
+                       {'Rules': [
+                           {'PerimeterMax': 'low', 'ConcavePointsMax': 'low', 'AreaSe': 'low', 'SmoothnessMax': 'low',
+                            'Antop': '&', 'Diagnosis': 'benign'},
+                           {'PerimeterMax': 'high', 'ConcavePointsMax': 'high', 'AreaSe': 'high', 'SmoothnessMax':
+                               'high', 'Antop': '&', 'Diagnosis': 'malignant'}]}],
+                      [{'Config': [{'Enabled': True, 'CrispToBinaryThreshold': 125, 'DefuzzifyMethod': 'centroid'}]},
+                       {'Antecedents': [{'PerimeterMax': {'mf': {'low': 'gaussmf',
+                                                                 'high': 'gaussmf'}}},
+                                        {'ConcavePointsMax': {'mf': {'low': 'gaussmf',
+                                                                     'high': 'gaussmf'}}},
+                                        {'AreaSe': {'mf': {'low': 'gaussmf',
+                                                           'high': 'gaussmf'}}},
+                                        {'TextureMean': {'mf': {'low': 'gaussmf',
+                                                                'high': 'gaussmf'}}},
+                                        {'SmoothnessMax': {'mf': {'low': 'gaussmf',
+                                                                  'high': 'gaussmf'}}}]},
+                       {'Consequent': [{'Diagnosis': {'mf': [{'benign': ['zmf', [10, 170]]},
+                                                             {'malignant': ['smf', [100, 200]]}]}}]},
+                       {'Rules': [
+                           {'PerimeterMax': 'low', 'ConcavePointsMax': 'low', 'AreaSe': 'low', 'TextureMean': 'low',
+                            'SmoothnessMax': 'low', 'Antop': '&', 'Diagnosis': 'benign'},
+                           {'PerimeterMax': 'high', 'ConcavePointsMax': 'high', 'AreaSe': 'high', 'TextureMean': 'high',
+                            'SmoothnessMax': 'high', 'Antop': '&', 'Diagnosis': 'malignant'}]}]
+                      ]
 
         self.ant_cfg = []
         self.con_cfg = []
@@ -104,10 +138,10 @@ class WDBCFis:
                     self.rules = []
 
                 with timer('\nCreating Antecedent Universe'):
-                    self.create_antecendents_universe()
+                    self.create_antecendents_universe(defuzzify_method=t[0]['Config'][0]['DefuzzifyMethod'])
 
                 with timer('\nCreating Consequent Universe'):
-                    self.create_consequent_universe()
+                    self.create_consequent_universe(defuzzify_method=t[0]['Config'][0]['DefuzzifyMethod'])
 
                 with timer('\nSetting Antecedent MFs'):
                     self.set_antecendents_mfs()
@@ -163,7 +197,7 @@ class WDBCFis:
         self.X = pd.read_csv('data/wdbc_selected_cols.csv')
 
         print('\n', '_' * 40, 'Shape After Data Load', '_' * 40)
-        self.print_shape()
+        self.print_shape(self.X)
 
     def set_y(self):
         self.y = self.X['Diagnosis']
@@ -174,6 +208,11 @@ class WDBCFis:
     def train_test_split(self):
         self.X_train, self.X_test, self.y_train, self.y_test = train_test_split(self.X, self.y, test_size=0.30,
                                                                                 random_state=self.random_state)
+        print('\n', '_' * 40, 'X_train Shape After Split', '_' * 40)
+        self.print_shape(self.X_train)
+        print('\n', '_' * 40, 'X_test Shape After Split', '_' * 40)
+        self.print_shape(self.X_test)
+
 
     def set_X_y_train(self):
         # Used for MF shaping when feature distribution filtered by target
@@ -193,8 +232,9 @@ class WDBCFis:
                 for f in cfg['Consequent']:
                     for fk, fv in f.items():
                         if 'mf' in f[fk]:
-                            for mfclass, mfshape in f[fk]['mf'].items():
-                                self.con_cfg.append({fk: (mfclass, mfshape)})
+                            for terms in f[fk]['mf']:
+                                for mfclass, mfshape in terms.items():
+                                    self.con_cfg.append({fk: (mfclass, mfshape)})
 
     def set_X_train_test_cols(self):
         cols = []
@@ -205,19 +245,19 @@ class WDBCFis:
         self.X_train = self.X_train[cols]
         self.X_test = self.X_test[cols]
 
-    def print_shape(self):
-        print('\tRow count:\t', '{}'.format(self.X.shape[0]))
-        print('\tColumn count:\t', '{}'.format(self.X.shape[1]))
+    def print_shape(self, df):
+        print('\tRow count:\t', '{}'.format(df.shape[0]))
+        print('\tColumn count:\t', '{}'.format(df.shape[1]))
 
-    def create_antecendents_universe(self):
+    def create_antecendents_universe(self, defuzzify_method='centroid'):
         # Set universe boundary for each feature
         for feat in self.X_train:
             self.ant[feat] = ct.Antecedent(np.linspace(self.X_train[feat].min() - (self.X_train[feat].std() * 1.1),
                                                        self.X_train[feat].max() + (self.X_train[feat].std() * 1.1),
-                                                       num=200), feat)
+                                                       num=200), feat, defuzzify_method=defuzzify_method)
 
-    def create_consequent_universe(self):
-        self.diagnosis = ct.Consequent(np.arange(0, 200, 1), 'diagnosis')
+    def create_consequent_universe(self, defuzzify_method='centroid'):
+        self.diagnosis = ct.Consequent(np.arange(0, 200, 1), 'diagnosis', defuzzify_method=defuzzify_method)
 
     def set_antecendents_mfs(self):
         # Diagnosis: Benign = class 0, Malignant = Class 1
@@ -267,7 +307,7 @@ class WDBCFis:
     def set_consequent_mfs(self):
         for c in self.con_cfg:
             for k, v in c.items():
-                self.diagnosis[v[0]] = getattr(fz, v[1]['mf'])(self.diagnosis.universe, v[1]['shape'])
+                self.diagnosis[v[0]] = getattr(fz, v[1][0])(self.diagnosis.universe, v[1][1][0], v[1][1][1])
 
         self.diagnosis.view()
 
@@ -305,7 +345,7 @@ class WDBCFis:
                 self.diagnose.input[si] = sv
             try:
                 self.diagnose.compute()
-                self.diagnosis.view(sim=self.diagnose)
+                #self.diagnosis.view(sim=self.diagnose)
             except ValueError:
                 print(self.diagnose.input)
                 continue

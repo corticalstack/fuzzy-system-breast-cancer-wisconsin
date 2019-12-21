@@ -47,7 +47,7 @@ class WDBCAnalysis:
         self.clusters_stop = 5
         self.feature_idx = {0: 0, 1: 0, 2: 0}
         self.cluster_cols = [('PerimeterMax', 'AreaSe'),
-                             ('PerimeterSe', 'TextureMean')]
+                             ('ConcavePointsMax', 'TextureMean')]
 
         with timer('\nLoad dataset'):
             self.load_data()
@@ -224,7 +224,7 @@ class WDBCAnalysis:
 
         # Drop highly correlated for 2nd heatmap
         upper = corr.where(np.triu(np.ones(corr.shape), k=1).astype(np.bool))
-        self.highly_correlated_features = [column for column in upper.columns if any(upper[column] > 0.95)]
+        self.highly_correlated_features = [column for column in upper.columns if any(upper[column] > 0.85)]
         df_corr = df_corr.drop(df_corr[self.highly_correlated_features], axis=1)
         corr = df_corr.corr()
         plt.clf()
@@ -265,9 +265,9 @@ class WDBCAnalysis:
 
     def linearity(self, dataset, dataset_name):
         buckets = [0, 1]
-        self.convex_hull(dataset, buckets, cola='PerimeterSe', colb='AreaSe', target='Diagnosis',
+        self.convex_hull(dataset, buckets, cola='ConcavePointsMax', colb='TextureMean', target='Diagnosis',
                          dataset_name=dataset_name)
-        self.convex_hull(dataset, buckets, cola='PerimeterMax', colb='TextureMean', target='Diagnosis',
+        self.convex_hull(dataset, buckets, cola='PerimeterMax', colb='AreaSe', target='Diagnosis',
                          dataset_name=dataset_name)
 
     def convex_hull(self, df, buckets, cola, colb, target, dataset_name):

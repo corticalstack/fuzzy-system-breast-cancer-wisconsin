@@ -59,9 +59,9 @@ class WDBCFis:
             '|': operator.or_
         }
 
-        #'CrispToBinaryThreshold': 119, 'DefuzzifyMethod': 'centroid'
+        self.mf_plotted = {}
 
-        self.tests = [[{'Config': [{'Enabled': False}]},
+        self.tests = [[{'Config': [{'Enabled': True}]},
                        {'Ant': [{'PerimeterMax': {'mf': {'low': 'trimf', 'high': 'trapmf'}}},
                                 {'ConcavePointsMax': {'mf': {'low': 'trimf', 'high': 'gaussmf'}}}]},
                        {'Con': [{'Diagnosis': {'mf': [{'benign': ['zmf', [10, 170]]},
@@ -69,7 +69,7 @@ class WDBCFis:
                        {'Rules': [{'PerimeterMax': 'low', 'ConcavePointsMax': 'low', '-op': '&', 'Diagnosis': 'benign'},
                                   {'PerimeterMax': 'high', 'ConcavePointsMax': 'high', '-op': '&',
                                    'Diagnosis': 'malignant'}]}],
-                      [{'Config': [{'Enabled': False}]},
+                      [{'Config': [{'Enabled': True}]},
                        {'Ant': [{'AreaSe': {'mf': {'low': 'gaussmf', 'high': 'gaussmf'}}},
                                 {'SmoothnessMax': {'mf': {'low': 'gaussmf', 'high': 'gaussmf'}}}]},
                        {'Con': [{'Diagnosis': {'mf': [{'benign': ['zmf', [10, 170]]},
@@ -77,7 +77,7 @@ class WDBCFis:
                        {'Rules': [
                            {'AreaSe': 'low', 'SmoothnessMax': 'low', '-op': '&', 'Diagnosis': 'benign'},
                            {'AreaSe': 'high', 'SmoothnessMax': 'high', '-op': '&', 'Diagnosis': 'malignant'}]}],
-                      [{'Config': [{'Enabled': False}]},
+                      [{'Config': [{'Enabled': True}]},
                        {'Ant': [{'PerimeterMax': {'mf': {'low': 'trimf', 'high': 'trapmf'}}},
                                 {'ConcavePointsMax': {'mf': {'low': 'trimf', 'high': 'gaussmf'}}},
                                 {'AreaSe': {'mf': {'low': 'gaussmf', 'high': 'gaussmf'}}},
@@ -104,10 +104,6 @@ class WDBCFis:
                             'SmoothnessMax': 'high', '-op': '&', 'Diagnosis': 'malignant'}]}]
                       ]
 
-        self.ant_cfg = []
-        self.con_cfg = []
-        self.rule_cfg = []
-
         with timer('\nLoad dataset'):
             self.load_data()
 
@@ -121,6 +117,9 @@ class WDBCFis:
                     continue
 
                 with timer('\nTest ' + str(i)):
+                    self.ant_cfg = []
+                    self.con_cfg = []
+                    self.rule_cfg = []
                     self.set_test_cfg(t)
 
                 with timer('\nPreparing dataset for test '):
@@ -128,16 +127,16 @@ class WDBCFis:
                     self.set_X_train_test_cols()
                     self.set_X_y_train()
 
+                with timer('\nMaking Alternative ML Model Predictions'):
+                    self.lr_model_predict_score(i)
+                    self.dtc_model_predict_score(i)
+                    self.rfc_model_predict_score(i)
+
+                for d in range(1, 5):
                     self.ant = {}
                     self.diagnosis = None
                     self.rules = []
 
-                with timer('\nMaking Alternative ML Model Predictions'):
-                    self.lr_model_predict_score(i)
-                    # self.dtc_model_predict_score(i)
-                    # self.rfc_model_predict_score(i)
-
-                for d in range(1, 5):
                     with timer('\nCreating Antecedent Universe'):
                         self.create_antecendents_universe(defuzzify_method=self.defuzzify_switcher[d])
 
@@ -160,6 +159,8 @@ class WDBCFis:
                     with timer('\nMaking Model Predictions'):
                         for c2b in range(115, 130):
                             self.fis_model_predict_score(i, self.defuzzify_switcher[d], c2b)
+
+            self.download_predict_log()
 
     @staticmethod
     def feature_std(feat, df, target):
@@ -211,7 +212,6 @@ class WDBCFis:
         self.print_shape(self.X_train)
         print('\n', '_' * 40, 'X_test Shape After Split', '_' * 40)
         self.print_shape(self.X_test)
-
 
     def set_X_y_train(self):
         # Used for MF shaping when feature distribution filtered by target
@@ -267,7 +267,10 @@ class WDBCFis:
             for k, v in c.items():
                 if k == a:
                     self.ant[a][v[0]] = getattr(self, 'mf_' + v[1])(a, v[0], s)
-        self.ant[a].view()
+
+        if a not in self.mf_plotted:
+            self.mf_plotted[a] = True
+            self.ant[a].view()
 
     def set_antecedents_stats(self, a):
         s = {}
@@ -306,7 +309,9 @@ class WDBCFis:
             for k, v in c.items():
                 self.diagnosis[v[0]] = getattr(fz, v[1][0])(self.diagnosis.universe, v[1][1][0], v[1][1][1])
 
-        self.diagnosis.view()
+        if 'diagnosis' not in self.mf_plotted:
+            self.mf_plotted['diagnosis'] = True
+            self.diagnosis.view()
 
     def set_rules(self, test):
         for r in test:
@@ -348,53 +353,14 @@ class WDBCFis:
                 continue
 
             crisp_to_binary = 0 if self.diagnose.output['diagnosis'] < crisp_threshold else 1
-
-            output = {'CrispOut': self.diagnose.output['diagnosis'], 'BinaryOut': crisp_to_binary}
-            self.y_predict.append({'CrispOut': self.diagnose.output['diagnosis']})
-            y_pred.append(output['BinaryOut'])
-            #print(self.diagnose.output)
-            #ants = [i for i in self.diagnose.ctrl.antecedents]
-            #ant = ants[0]
-            #for ant in ants:
-            #    for t in ant.terms:
-            #        print(ant.label, t, ant.terms[t].membership_value[self.diagnose])
-            #        for t in ant.terms:
-            #            print(ant.label, t, ant.terms[t].membership_value[self.diagnose])
-            #print(['For term \'{0}\' membership is {1}'.format(label, term.membership_value[self.diagnose])
-            #       for (label, term) in ant.terms.iteritems()])
-            #self.diagnose.print_state()
-
-        # cm = confusion_matrix(self.y_test, y_pred)
-        #
-        # FP = cm.sum(axis=0) - np.diag(cm)
-        # FN = cm.sum(axis=1) - np.diag(cm)
-        # TP = np.diag(cm)
-        # TN = cm.sum() - (FP + FN + TP)
-        #
-        # # Sensitivity, hit rate, recall, or true positive rate
-        # TPR = TP / (TP + FN)
-        # # Specificity or true negative rate
-        # TNR = TN / (TN + FP)
-        # # Precision or positive predictive value
-        # PPV = TP / (TP + FP)
-        # # Negative predictive value
-        # NPV = TN / (TN + FN)
-        # # Fall out or false positive rate
-        # FPR = FP / (FP + TN)
-        # # False negative rate
-        # FNR = FN / (TP + FN)
-        # # False discovery rate
-        # FDR = FP / (TP + FP)
-        #
-        # # Overall accuracy
-        # ACC = (TP + TN) / (TP + FP + FN + TN)
+            y_pred.append(crisp_to_binary)
 
         acc = accuracy_score(self.y_test, y_pred)
         sen = recall_score(self.y_test, y_pred)
-        self.log_prediction('FIS', defuzzify_method, test_num, acc, sen)
+        ref = 't' + str(test_num) + '_FIS_ct' + str(crisp_threshold) + '_' + defuzzify_method
+        self.log_prediction(ref, 'FIS', defuzzify_method, acc, sen)
 
-        #print('Test ' + test_num + ' - FIS - Accuracy ' + str(acc))
-        #self.confusion_matrix(self.y_test, y_pred, test_num, 'FIS')
+        self.confusion_matrix(self.y_test, y_pred, ref, 'FIS')
 
         # JP see self.system.view_n() and see if useful, what it does
         #self.system.view_n()
@@ -405,8 +371,10 @@ class WDBCFis:
         lr.fit(self.X_train, self.y_train)
         y_pred = lr.predict(self.X_test)
         acc = accuracy_score(self.y_test, y_pred)
-        print('Test ' + test_num + ' - LR - Accuracy ' + str(acc))
-        self.confusion_matrix(self.y_test, y_pred, test_num, 'LR')
+        sen = recall_score(self.y_test, y_pred)
+        ref = 't' + str(test_num) + '_LR'
+        self.log_prediction(ref, 'LR', 'n/a', acc, sen)
+        self.confusion_matrix(self.y_test, y_pred, ref, 'LR')
 
     def dtc_model_predict_score(self, test_num):
         test_num = str(test_num)
@@ -414,8 +382,10 @@ class WDBCFis:
         dtc.fit(self.X_train, self.y_train)
         y_pred = dtc.predict(self.X_test)
         acc = accuracy_score(self.y_test, y_pred)
-        print('Test ' + test_num + ' - DTC - Accuracy ' + str(acc))
-        self.confusion_matrix(self.y_test, y_pred, test_num, 'DTC')
+        sen = recall_score(self.y_test, y_pred)
+        ref = 't' + str(test_num) + '_DTC'
+        self.log_prediction(ref, 'DTC', 'n/a', acc, sen)
+        self.confusion_matrix(self.y_test, y_pred, ref, 'DTC')
 
     def rfc_model_predict_score(self, test_num):
         test_num = str(test_num)
@@ -423,23 +393,31 @@ class WDBCFis:
         rfc.fit(self.X_train, self.y_train)
         y_pred = rfc.predict(self.X_test)
         acc = accuracy_score(self.y_test, y_pred)
-        print('Test ' + test_num + ' - RFC - Accuracy ' + str(acc))
-        self.confusion_matrix(self.y_test, y_pred, test_num, 'RFC')
+        sen = recall_score(self.y_test, y_pred)
+        ref = 't' + str(test_num) + '_RFC'
+        self.log_prediction(ref, 'RFC', 'n/a', acc, sen)
+        self.confusion_matrix(self.y_test, y_pred, ref, 'RFC')
 
-    def confusion_matrix(self, y, y_pred, test_num, model_name):
+    def confusion_matrix(self, y, y_pred, ref, model_name):
         cm = confusion_matrix(y, y_pred)
         ax = plt.subplot()
         sns.heatmap(cm, annot=True, ax=ax, annot_kws={"size": 14}, fmt='d', cmap='Greens', cbar=False)
         ax.set_xlabel('Predicted Class')
         ax.set_ylabel('True Class')
-        ax.set_title('Confusion Matrix')
+        ax.set_title('Confusion Matrix - ' + ref)
         ax.xaxis.set_ticklabels(['Benign', 'Malignant'])
         ax.yaxis.set_ticklabels(['Benign', 'Malignant'])
-        plt.savefig(fname='plots/CM - test ' + test_num + ' - ' + model_name + '.png', dpi=300, format='png')
-        plt.show()
+        plt.savefig(fname='plots/CM - ' + ref + '.png', dpi=300, format='png')
+        plt.close()
+        #plt.show()
 
-    def log_prediction(self, clf, dm, test_num, acc, sen):
-        self.predict_log.append([clf, dm, test_num, acc, sen])
+    def log_prediction(self, ref, clf, dm, acc, sen):
+        self.predict_log.append([ref, clf, dm, round(acc, 3), round(sen, 3)])
+
+    def download_predict_log(self):
+        df_predict_log = pd.DataFrame(self.predict_log, columns=['Ref', 'Clf', 'Dm', 'Acc', 'Sen'])
+        df_predict_log.sort_values(by=['Sen', 'Acc', 'Clf', 'Dm'], ascending=False, inplace=True)
+        df_predict_log.to_csv('data/predict_log.csv', header=True, index=False)
 
 
 wdbcFis = WDBCFis()

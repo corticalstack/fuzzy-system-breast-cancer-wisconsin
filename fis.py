@@ -17,12 +17,6 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 
 
-# Skfuzzy API
-# https://scikit-fuzzy.readthedocs.io/en/latest/api/skfuzzy.html
-
-# Example Skfuzzy FIS
-#https://loctv.wordpress.com/2016/10/02/using-scikit-fuzzy-to-build-an-obesity-diagnosis-system/
-
 @contextmanager
 def timer(title):
     t0 = time.time()
@@ -61,7 +55,15 @@ class WDBCFis:
 
         self.mf_plotted = {}
 
-        self.tests = [[{'Config': [{'Enabled': True}]},
+        self.tests = [[{'Config': [{'Enabled': True}]},  # Test t0
+                       {'Ant': [{'PerimeterMax': {'mf': {'low': 'gaussmf', 'high': 'gaussmf'}}},
+                                {'ConcavePointsMax': {'mf': {'low': 'gaussmf', 'high': 'gaussmf'}}}]},
+                       {'Con': [{'Diagnosis': {'mf': [{'benign': ['zmf', [10, 170]]},
+                                                      {'malignant': ['smf', [100, 200]]}]}}]},
+                       {'Rules': [{'PerimeterMax': 'low', 'ConcavePointsMax': 'low', '-op': '&', 'Diagnosis': 'benign'},
+                                  {'PerimeterMax': 'high', 'ConcavePointsMax': 'high', '-op': '&',
+                                   'Diagnosis': 'malignant'}]}],
+                      [{'Config': [{'Enabled': True}]},  # Test t1
                        {'Ant': [{'PerimeterMax': {'mf': {'low': 'trimf', 'high': 'trapmf'}}},
                                 {'ConcavePointsMax': {'mf': {'low': 'trimf', 'high': 'gaussmf'}}}]},
                        {'Con': [{'Diagnosis': {'mf': [{'benign': ['zmf', [10, 170]]},
@@ -69,27 +71,7 @@ class WDBCFis:
                        {'Rules': [{'PerimeterMax': 'low', 'ConcavePointsMax': 'low', '-op': '&', 'Diagnosis': 'benign'},
                                   {'PerimeterMax': 'high', 'ConcavePointsMax': 'high', '-op': '&',
                                    'Diagnosis': 'malignant'}]}],
-                      [{'Config': [{'Enabled': True}]},
-                       {'Ant': [{'AreaSe': {'mf': {'low': 'gaussmf', 'high': 'gaussmf'}}},
-                                {'SmoothnessMax': {'mf': {'low': 'gaussmf', 'high': 'gaussmf'}}}]},
-                       {'Con': [{'Diagnosis': {'mf': [{'benign': ['zmf', [10, 170]]},
-                                                      {'malignant': ['smf', [100, 200]]}]}}]},
-                       {'Rules': [
-                           {'AreaSe': 'low', 'SmoothnessMax': 'low', '-op': '&', 'Diagnosis': 'benign'},
-                           {'AreaSe': 'high', 'SmoothnessMax': 'high', '-op': '&', 'Diagnosis': 'malignant'}]}],
-                      [{'Config': [{'Enabled': True}]},
-                       {'Ant': [{'PerimeterMax': {'mf': {'low': 'trimf', 'high': 'trapmf'}}},
-                                {'ConcavePointsMax': {'mf': {'low': 'trimf', 'high': 'gaussmf'}}},
-                                {'AreaSe': {'mf': {'low': 'gaussmf', 'high': 'gaussmf'}}},
-                                {'SmoothnessMax': {'mf': {'low': 'gaussmf', 'high': 'gaussmf'}}}]},
-                       {'Con': [{'Diagnosis': {'mf': [{'benign': ['zmf', [10, 170]]},
-                                                      {'malignant': ['smf', [100, 200]]}]}}]},
-                       {'Rules': [
-                           {'PerimeterMax': 'low', 'ConcavePointsMax': 'low', 'AreaSe': 'low', 'SmoothnessMax': 'low',
-                            '-op': '&', 'Diagnosis': 'benign'},
-                           {'PerimeterMax': 'high', 'ConcavePointsMax': 'high', 'AreaSe': 'high', 'SmoothnessMax':
-                               'high', '-op': '&', 'Diagnosis': 'malignant'}]}],
-                      [{'Config': [{'Enabled': True}]},
+                      [{'Config': [{'Enabled': True}]},  # Test t2
                        {'Ant': [{'PerimeterMax': {'mf': {'low': 'gaussmf', 'high': 'gaussmf'}}},
                                 {'ConcavePointsMax': {'mf': {'low': 'gaussmf', 'high': 'gaussmf'}}},
                                 {'AreaSe': {'mf': {'low': 'gaussmf', 'high': 'gaussmf'}}},
@@ -101,7 +83,78 @@ class WDBCFis:
                            {'PerimeterMax': 'low', 'ConcavePointsMax': 'low', 'AreaSe': 'low', 'TextureMean': 'low',
                             'SmoothnessMax': 'low', '-op': '&', 'Diagnosis': 'benign'},
                            {'PerimeterMax': 'high', 'ConcavePointsMax': 'high', 'AreaSe': 'high', 'TextureMean': 'high',
-                            'SmoothnessMax': 'high', '-op': '&', 'Diagnosis': 'malignant'}]}]
+                            'SmoothnessMax': 'high', '-op': '&', 'Diagnosis': 'malignant'}]}],
+                      [{'Config': [{'Enabled': True}]},  # Test t3
+                       {'Ant': [{'PerimeterMax': {'mf': {'low': 'trimf', 'high': 'trapmf'}}},
+                                {'ConcavePointsMax': {'mf': {'low': 'trimf', 'high': 'gaussmf'}}},
+                                {'AreaSe': {'mf': {'low': 'trimf', 'high': 'gaussmf'}}},
+                                {'TextureMean': {'mf': {'low': 'trimf', 'high': 'trimf'}}},
+                                {'SmoothnessMax': {'mf': {'low': 'trimf', 'high': 'trimf'}}}]},
+                       {'Con': [{'Diagnosis': {'mf': [{'benign': ['zmf', [10, 170]]},
+                                                      {'malignant': ['smf', [100, 200]]}]}}]},
+                       {'Rules': [
+                           {'PerimeterMax': 'low', 'ConcavePointsMax': 'low', 'AreaSe': 'low', 'TextureMean': 'low',
+                            'SmoothnessMax': 'low', '-op': '&', 'Diagnosis': 'benign'},
+                           {'PerimeterMax': 'high', 'ConcavePointsMax': 'high', 'AreaSe': 'high', 'TextureMean': 'high',
+                            'SmoothnessMax': 'high', '-op': '&', 'Diagnosis': 'malignant'}]}],
+                      [{'Config': [{'Enabled': True}]},  # Test t4
+                       {'Ant': [{'PerimeterMax': {'mf': {'low': 'gaussmf', 'high': 'gaussmf'}}},
+                                {'ConcavePointsMax': {'mf': {'low': 'gaussmf', 'high': 'gaussmf'}}},
+                                {'AreaSe': {'mf': {'low': 'gaussmf', 'high': 'gaussmf'}}}]},
+                       {'Con': [{'Diagnosis': {'mf': [{'benign': ['zmf', [10, 170]]},
+                                                      {'malignant': ['smf', [100, 200]]}]}}]},
+                       {'Rules': [{'PerimeterMax': 'low', 'ConcavePointsMax': 'low', 'AreaSe': 'low', '-op': '&',
+                                   'Diagnosis': 'benign'},
+                                  {'PerimeterMax': 'high', 'ConcavePointsMax': 'high', 'AreaSe': 'high', '-op': '&',
+                                   'Diagnosis': 'malignant'}]}],
+                      [{'Config': [{'Enabled': True}]},  # Test t5
+                       {'Ant': [{'PerimeterMax': {'mf': {'low': 'trimf', 'high': 'trapmf'}}},
+                                {'ConcavePointsMax': {'mf': {'low': 'trimf', 'high': 'gaussmf'}}},
+                                {'AreaSe': {'mf': {'low': 'trimf', 'high': 'gaussmf'}}}]},
+                       {'Con': [{'Diagnosis': {'mf': [{'benign': ['zmf', [10, 170]]},
+                                                      {'malignant': ['smf', [100, 200]]}]}}]},
+                       {'Rules': [{'PerimeterMax': 'low', 'ConcavePointsMax': 'low', 'AreaSe': 'low', '-op': '&',
+                                   'Diagnosis': 'benign'},
+                                  {'PerimeterMax': 'high', 'ConcavePointsMax': 'high', 'AreaSe': 'high', '-op': '&',
+                                   'Diagnosis': 'malignant'}]}],
+                      [{'Config': [{'Enabled': True}]},  # Test t6
+                       {'Ant': [{'PerimeterMax': {'mf': {'low': 'gaussmf', 'high': 'gaussmf'}}},
+                                {'ConcavePointsMax': {'mf': {'low': 'gaussmf', 'high': 'gaussmf'}}},
+                                {'AreaSe': {'mf': {'low': 'gaussmf', 'high': 'gaussmf'}}},
+                                {'TextureMean': {'mf': {'low': 'gaussmf', 'high': 'gaussmf'}}}]},
+                       {'Con': [{'Diagnosis': {'mf': [{'benign': ['zmf', [10, 170]]},
+                                                      {'malignant': ['smf', [100, 200]]}]}}]},
+                       {'Rules': [{'PerimeterMax': 'low', 'ConcavePointsMax': 'low', 'AreaSe': 'low', 'TextureMean':
+                           'low', '-op': '&', 'Diagnosis': 'benign'},
+                                  {'PerimeterMax': 'high', 'ConcavePointsMax': 'high', 'AreaSe': 'high', 'TextureMean':
+                                      'high', '-op': '&', 'Diagnosis': 'malignant'}]}],
+                      [{'Config': [{'Enabled': True}]},  # Test t7
+                       {'Ant': [{'PerimeterMax': {'mf': {'low': 'trimf', 'high': 'trapmf'}}},
+                                {'ConcavePointsMax': {'mf': {'low': 'trimf', 'high': 'gaussmf'}}},
+                                {'AreaSe': {'mf': {'low': 'trimf', 'high': 'gaussmf'}}},
+                                {'TextureMean': {'mf': {'low': 'trimf', 'high': 'trimf'}}}]},
+                       {'Con': [{'Diagnosis': {'mf': [{'benign': ['zmf', [10, 170]]},
+                                                      {'malignant': ['smf', [100, 200]]}]}}]},
+                       {'Rules': [{'PerimeterMax': 'low', 'ConcavePointsMax': 'low', 'AreaSe': 'low', 'TextureMean':
+                           'low', '-op': '&', 'Diagnosis': 'benign'},
+                                  {'PerimeterMax': 'high', 'ConcavePointsMax': 'high', 'AreaSe': 'high', 'TextureMean':
+                                      'high', '-op': '&', 'Diagnosis': 'malignant'}]}],
+                      [{'Config': [{'Enabled': True}]},  # Test t8
+                       {'Ant': [{'TextureMean': {'mf': {'low': 'gaussmf', 'high': 'gaussmf'}}},
+                                {'SmoothnessMax': {'mf': {'low': 'gaussmf', 'high': 'gaussmf'}}}]},
+                       {'Con': [{'Diagnosis': {'mf': [{'benign': ['zmf', [10, 170]]},
+                                                       {'malignant': ['smf', [100, 200]]}]}}]},
+                       {'Rules': [{'TextureMean': 'low', 'SmoothnessMax': 'low', '-op': '&', 'Diagnosis': 'benign'},
+                                  {'TextureMean': 'high', 'SmoothnessMax': 'high', '-op': '&', 'Diagnosis':
+                                      'malignant'}]}],
+                      [{'Config': [{'Enabled': True}]},  # Test t9
+                       {'Ant': [{'TextureMean': {'mf': {'low': 'trimf', 'high': 'trimf'}}},
+                                {'SmoothnessMax': {'mf': {'low': 'trimf', 'high': 'trimf'}}}]},
+                       {'Con': [{'Diagnosis': {'mf': [{'benign': ['zmf', [10, 170]]},
+                                                      {'malignant': ['smf', [100, 200]]}]}}]},
+                       {'Rules': [{'TextureMean': 'low', 'SmoothnessMax': 'low', '-op': '&', 'Diagnosis': 'benign'},
+                                  {'TextureMean': 'high', 'SmoothnessMax': 'high', '-op': '&', 'Diagnosis':
+                                      'malignant'}]}]
                       ]
 
         with timer('\nLoad dataset'):
@@ -111,7 +164,7 @@ class WDBCFis:
             self.set_y()
             self.remove_target_from_X()
 
-        with timer('\nSetting Antecedents Universe'):
+        with timer('\nTesting Scenarios'):
             for i, t in enumerate(self.tests):
                 if not t[0]['Config'][0]['Enabled']:
                     continue
@@ -267,9 +320,9 @@ class WDBCFis:
             for k, v in c.items():
                 if k == a:
                     self.ant[a][v[0]] = getattr(self, 'mf_' + v[1])(a, v[0], s)
-
-        if a not in self.mf_plotted:
-            self.mf_plotted[a] = True
+                    #ant_mf = a + v[1]
+        if a + v[1] not in self.mf_plotted:
+            self.mf_plotted[a + v[1]] = True
             self.ant[a].view()
 
     def set_antecedents_stats(self, a):

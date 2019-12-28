@@ -39,6 +39,12 @@ class WDBCFis:
 
         self.predict_log = []
 
+        self.t_enabled = None
+        self.t_id = None
+        self.t_rs = None
+        self.t_mfgrp = None
+        self.last_rs = None
+
         self.ant = {}
         self.diagnosis = None
         self.rules = []
@@ -55,7 +61,7 @@ class WDBCFis:
 
         self.mf_plotted = {}
 
-        self.tests = [[{'Config': [{'Enabled': True}]},  # Test t0
+        self.tests = [[{'Config': [{'Id': 1, 'Rs': 1, 'Mfgrp': 'gauss', 'Enabled': True}]},
                        {'Ant': [{'PerimeterMax': {'mf': {'low': 'gaussmf', 'high': 'gaussmf'}}},
                                 {'ConcavePointsMax': {'mf': {'low': 'gaussmf', 'high': 'gaussmf'}}}]},
                        {'Con': [{'Diagnosis': {'mf': [{'benign': ['zmf', [10, 170]]},
@@ -63,7 +69,17 @@ class WDBCFis:
                        {'Rules': [{'PerimeterMax': 'low', 'ConcavePointsMax': 'low', '-op': '&', 'Diagnosis': 'benign'},
                                   {'PerimeterMax': 'high', 'ConcavePointsMax': 'high', '-op': '&',
                                    'Diagnosis': 'malignant'}]}],
-                      [{'Config': [{'Enabled': True}]},  # Test t1
+
+                      [{'Config': [{'Id': 2, 'Rs': 1, 'Mfgrp': 'zs', 'Enabled': True}]},
+                       {'Ant': [{'PerimeterMax': {'mf': {'low': 'zmf', 'high': 'smf'}}},
+                                {'ConcavePointsMax': {'mf': {'low': 'zmf', 'high': 'smf'}}}]},
+                       {'Con': [{'Diagnosis': {'mf': [{'benign': ['zmf', [10, 170]]},
+                                                      {'malignant': ['smf', [100, 200]]}]}}]},
+                       {'Rules': [{'PerimeterMax': 'low', 'ConcavePointsMax': 'low', '-op': '&', 'Diagnosis': 'benign'},
+                                  {'PerimeterMax': 'high', 'ConcavePointsMax': 'high', '-op': '&',
+                                   'Diagnosis': 'malignant'}]}],
+
+                      [{'Config': [{'Id': 3, 'Rs': 1, 'Mfgrp': 'mix', 'Enabled': True}]},
                        {'Ant': [{'PerimeterMax': {'mf': {'low': 'trimf', 'high': 'trapmf'}}},
                                 {'ConcavePointsMax': {'mf': {'low': 'trimf', 'high': 'gaussmf'}}}]},
                        {'Con': [{'Diagnosis': {'mf': [{'benign': ['zmf', [10, 170]]},
@@ -71,7 +87,8 @@ class WDBCFis:
                        {'Rules': [{'PerimeterMax': 'low', 'ConcavePointsMax': 'low', '-op': '&', 'Diagnosis': 'benign'},
                                   {'PerimeterMax': 'high', 'ConcavePointsMax': 'high', '-op': '&',
                                    'Diagnosis': 'malignant'}]}],
-                      [{'Config': [{'Enabled': True}]},  # Test t2
+
+                      [{'Config': [{'Id': 4, 'Rs': 2, 'Mfgrp': 'gauss', 'Enabled': True}]},
                        {'Ant': [{'PerimeterMax': {'mf': {'low': 'gaussmf', 'high': 'gaussmf'}}},
                                 {'ConcavePointsMax': {'mf': {'low': 'gaussmf', 'high': 'gaussmf'}}},
                                 {'AreaSe': {'mf': {'low': 'gaussmf', 'high': 'gaussmf'}}},
@@ -79,12 +96,26 @@ class WDBCFis:
                                 {'SmoothnessMax': {'mf': {'low': 'gaussmf', 'high': 'gaussmf'}}}]},
                        {'Con': [{'Diagnosis': {'mf': [{'benign': ['zmf', [10, 170]]},
                                                       {'malignant': ['smf', [100, 200]]}]}}]},
+                       {'Rules': [{'PerimeterMax': 'low', 'ConcavePointsMax': 'low', 'AreaSe': 'low', 'TextureMean':
+                           'low', 'SmoothnessMax': 'low', '-op': '&', 'Diagnosis': 'benign'}, {'PerimeterMax': 'high',
+                           'ConcavePointsMax': 'high', 'AreaSe': 'high', 'TextureMean': 'high', 'SmoothnessMax': 'high',
+                           '-op': '&', 'Diagnosis': 'malignant'}]}],
+
+                      [{'Config': [{'Id': 5, 'Rs': 2, 'Mfgrp': 'zs', 'Enabled': True}]},
+                       {'Ant': [{'PerimeterMax': {'mf': {'low': 'zmf', 'high': 'smf'}}},
+                                {'ConcavePointsMax': {'mf': {'low': 'zmf', 'high': 'smf'}}},
+                                {'AreaSe': {'mf': {'low': 'zmf', 'high': 'smf'}}},
+                                {'TextureMean': {'mf': {'low': 'zmf', 'high': 'smf'}}},
+                                {'SmoothnessMax': {'mf': {'low': 'zmf', 'high': 'smf'}}}]},
+                       {'Con': [{'Diagnosis': {'mf': [{'benign': ['zmf', [10, 170]]},
+                                                      {'malignant': ['smf', [100, 200]]}]}}]},
                        {'Rules': [
                            {'PerimeterMax': 'low', 'ConcavePointsMax': 'low', 'AreaSe': 'low', 'TextureMean': 'low',
                             'SmoothnessMax': 'low', '-op': '&', 'Diagnosis': 'benign'},
                            {'PerimeterMax': 'high', 'ConcavePointsMax': 'high', 'AreaSe': 'high', 'TextureMean': 'high',
                             'SmoothnessMax': 'high', '-op': '&', 'Diagnosis': 'malignant'}]}],
-                      [{'Config': [{'Enabled': True}]},  # Test t3
+
+                      [{'Config': [{'Id': 6, 'Rs': 2, 'Mfgrp': 'mix', 'Enabled': True}]},
                        {'Ant': [{'PerimeterMax': {'mf': {'low': 'trimf', 'high': 'trapmf'}}},
                                 {'ConcavePointsMax': {'mf': {'low': 'trimf', 'high': 'gaussmf'}}},
                                 {'AreaSe': {'mf': {'low': 'trimf', 'high': 'gaussmf'}}},
@@ -97,7 +128,8 @@ class WDBCFis:
                             'SmoothnessMax': 'low', '-op': '&', 'Diagnosis': 'benign'},
                            {'PerimeterMax': 'high', 'ConcavePointsMax': 'high', 'AreaSe': 'high', 'TextureMean': 'high',
                             'SmoothnessMax': 'high', '-op': '&', 'Diagnosis': 'malignant'}]}],
-                      [{'Config': [{'Enabled': True}]},  # Test t4
+
+                      [{'Config': [{'Id': 7, 'Rs': 3, 'Mfgrp': 'gauss', 'Enabled': True}]},
                        {'Ant': [{'PerimeterMax': {'mf': {'low': 'gaussmf', 'high': 'gaussmf'}}},
                                 {'ConcavePointsMax': {'mf': {'low': 'gaussmf', 'high': 'gaussmf'}}},
                                 {'AreaSe': {'mf': {'low': 'gaussmf', 'high': 'gaussmf'}}}]},
@@ -107,7 +139,19 @@ class WDBCFis:
                                    'Diagnosis': 'benign'},
                                   {'PerimeterMax': 'high', 'ConcavePointsMax': 'high', 'AreaSe': 'high', '-op': '&',
                                    'Diagnosis': 'malignant'}]}],
-                      [{'Config': [{'Enabled': True}]},  # Test t5
+
+                      [{'Config': [{'Id': 8, 'Rs': 3, 'Mfgrp': 'zs', 'Enabled': True}]},
+                       {'Ant': [{'PerimeterMax': {'mf': {'low': 'zmf', 'high': 'smf'}}},
+                                {'ConcavePointsMax': {'mf': {'low': 'zmf', 'high': 'smf'}}},
+                                {'AreaSe': {'mf': {'low': 'zmf', 'high': 'smf'}}}]},
+                       {'Con': [{'Diagnosis': {'mf': [{'benign': ['zmf', [10, 170]]},
+                                                      {'malignant': ['smf', [100, 200]]}]}}]},
+                       {'Rules': [{'PerimeterMax': 'low', 'ConcavePointsMax': 'low', 'AreaSe': 'low', '-op': '&',
+                                   'Diagnosis': 'benign'},
+                                  {'PerimeterMax': 'high', 'ConcavePointsMax': 'high', 'AreaSe': 'high', '-op': '&',
+                                   'Diagnosis': 'malignant'}]}],
+
+                      [{'Config': [{'Id': 9, 'Rs': 3, 'Mfgrp': 'mix', 'Enabled': True}]},
                        {'Ant': [{'PerimeterMax': {'mf': {'low': 'trimf', 'high': 'trapmf'}}},
                                 {'ConcavePointsMax': {'mf': {'low': 'trimf', 'high': 'gaussmf'}}},
                                 {'AreaSe': {'mf': {'low': 'trimf', 'high': 'gaussmf'}}}]},
@@ -117,7 +161,8 @@ class WDBCFis:
                                    'Diagnosis': 'benign'},
                                   {'PerimeterMax': 'high', 'ConcavePointsMax': 'high', 'AreaSe': 'high', '-op': '&',
                                    'Diagnosis': 'malignant'}]}],
-                      [{'Config': [{'Enabled': True}]},  # Test t6
+
+                      [{'Config': [{'Id': 10, 'Rs': 4, 'Mfgrp': 'gauss', 'Enabled': True}]},
                        {'Ant': [{'PerimeterMax': {'mf': {'low': 'gaussmf', 'high': 'gaussmf'}}},
                                 {'ConcavePointsMax': {'mf': {'low': 'gaussmf', 'high': 'gaussmf'}}},
                                 {'AreaSe': {'mf': {'low': 'gaussmf', 'high': 'gaussmf'}}},
@@ -128,7 +173,20 @@ class WDBCFis:
                            'low', '-op': '&', 'Diagnosis': 'benign'},
                                   {'PerimeterMax': 'high', 'ConcavePointsMax': 'high', 'AreaSe': 'high', 'TextureMean':
                                       'high', '-op': '&', 'Diagnosis': 'malignant'}]}],
-                      [{'Config': [{'Enabled': True}]},  # Test t7
+
+                      [{'Config': [{'Id': 11, 'Rs': 4, 'Mfgrp': 'zs', 'Enabled': True}]},
+                       {'Ant': [{'PerimeterMax': {'mf': {'low': 'zmf', 'high': 'smf'}}},
+                                {'ConcavePointsMax': {'mf': {'low': 'zmf', 'high': 'smf'}}},
+                                {'AreaSe': {'mf': {'low': 'zmf', 'high': 'smf'}}},
+                                {'TextureMean': {'mf': {'low': 'zmf', 'high': 'smf'}}}]},
+                       {'Con': [{'Diagnosis': {'mf': [{'benign': ['zmf', [10, 170]]},
+                                                      {'malignant': ['smf', [100, 200]]}]}}]},
+                       {'Rules': [{'PerimeterMax': 'low', 'ConcavePointsMax': 'low', 'AreaSe': 'low', 'TextureMean':
+                           'low', '-op': '&', 'Diagnosis': 'benign'},
+                                  {'PerimeterMax': 'high', 'ConcavePointsMax': 'high', 'AreaSe': 'high', 'TextureMean':
+                                      'high', '-op': '&', 'Diagnosis': 'malignant'}]}],
+
+                      [{'Config': [{'Id': 12, 'Rs': 4, 'Mfgrp': 'mix', 'Enabled': True}]},
                        {'Ant': [{'PerimeterMax': {'mf': {'low': 'trimf', 'high': 'trapmf'}}},
                                 {'ConcavePointsMax': {'mf': {'low': 'trimf', 'high': 'gaussmf'}}},
                                 {'AreaSe': {'mf': {'low': 'trimf', 'high': 'gaussmf'}}},
@@ -139,7 +197,8 @@ class WDBCFis:
                            'low', '-op': '&', 'Diagnosis': 'benign'},
                                   {'PerimeterMax': 'high', 'ConcavePointsMax': 'high', 'AreaSe': 'high', 'TextureMean':
                                       'high', '-op': '&', 'Diagnosis': 'malignant'}]}],
-                      [{'Config': [{'Enabled': True}]},  # Test t8
+
+                      [{'Config': [{'Id': 13, 'Rs': 5, 'Mfgrp': 'gauss', 'Enabled': True}]},
                        {'Ant': [{'TextureMean': {'mf': {'low': 'gaussmf', 'high': 'gaussmf'}}},
                                 {'SmoothnessMax': {'mf': {'low': 'gaussmf', 'high': 'gaussmf'}}}]},
                        {'Con': [{'Diagnosis': {'mf': [{'benign': ['zmf', [10, 170]]},
@@ -147,7 +206,17 @@ class WDBCFis:
                        {'Rules': [{'TextureMean': 'low', 'SmoothnessMax': 'low', '-op': '&', 'Diagnosis': 'benign'},
                                   {'TextureMean': 'high', 'SmoothnessMax': 'high', '-op': '&', 'Diagnosis':
                                       'malignant'}]}],
-                      [{'Config': [{'Enabled': True}]},  # Test t9
+
+                      [{'Config': [{'Id': 14, 'Rs': 5, 'Mfgrp': 'zs', 'Enabled': True}]},
+                       {'Ant': [{'TextureMean': {'mf': {'low': 'zmf', 'high': 'smf'}}},
+                                {'SmoothnessMax': {'mf': {'low': 'zmf', 'high': 'smf'}}}]},
+                       {'Con': [{'Diagnosis': {'mf': [{'benign': ['zmf', [10, 170]]},
+                                                      {'malignant': ['smf', [100, 200]]}]}}]},
+                       {'Rules': [{'TextureMean': 'low', 'SmoothnessMax': 'low', '-op': '&', 'Diagnosis': 'benign'},
+                                  {'TextureMean': 'high', 'SmoothnessMax': 'high', '-op': '&', 'Diagnosis':
+                                      'malignant'}]}],
+
+                      [{'Config': [{'Id': 15, 'Rs': 5, 'Mfgrp': 'mix', 'Enabled': True}]},
                        {'Ant': [{'TextureMean': {'mf': {'low': 'trimf', 'high': 'trimf'}}},
                                 {'SmoothnessMax': {'mf': {'low': 'trimf', 'high': 'trimf'}}}]},
                        {'Con': [{'Diagnosis': {'mf': [{'benign': ['zmf', [10, 170]]},
@@ -166,52 +235,49 @@ class WDBCFis:
 
         with timer('\nTesting Scenarios'):
             for i, t in enumerate(self.tests):
-                if not t[0]['Config'][0]['Enabled']:
+                self.set_test_global_cfg(t)
+
+                if not self.t_enabled:
                     continue
 
-                with timer('\nTest ' + str(i)):
+                with timer('\nTest ' + str(self.t_id) + '_' + str(self.t_rs)):
                     self.ant_cfg = []
                     self.con_cfg = []
                     self.rule_cfg = []
-                    self.set_test_cfg(t)
+                    self.set_test_ant_con_cfg(t)
 
-                with timer('\nPreparing dataset for test '):
+                with timer('\nPreparing dataset for test'):
                     self.train_test_split()
                     self.set_X_train_test_cols()
                     self.set_X_y_train()
 
-                with timer('\nMaking Alternative ML Model Predictions'):
-                    self.lr_model_predict_score(i)
-                    self.dtc_model_predict_score(i)
-                    self.rfc_model_predict_score(i)
+                if self.last_rs != self.t_rs:
+                    self.last_rs = self.t_rs
+                    with timer('\nLogistic Regression ML Model Prediction'):
+                        self.lr_model_predict_score()
+                    with timer('\nDecision Tree ML Model Prediction'):
+                        self.dtc_model_predict_score()
+                    with timer('\nRandom Forest Classification ML Model Prediction'):
+                        self.rfc_model_predict_score()
 
                 for d in range(1, 5):
                     self.ant = {}
                     self.diagnosis = None
                     self.rules = []
 
-                    with timer('\nCreating Antecedent Universe'):
-                        self.create_antecendents_universe(defuzzify_method=self.defuzzify_switcher[d])
+                    self.create_antecendents_universe(defuzzify_method=self.defuzzify_switcher[d])
+                    self.create_consequent_universe(defuzzify_method=self.defuzzify_switcher[d])
+                    self.set_antecendents_mfs()
+                    self.set_consequent_mfs()
+                    self.set_rules(t)
 
-                    with timer('\nCreating Consequent Universe'):
-                        self.create_consequent_universe(defuzzify_method=self.defuzzify_switcher[d])
+                    self.system = ct.ControlSystem(rules=self.rules)
+                    self.diagnose = ct.ControlSystemSimulation(self.system)
 
-                    with timer('\nSetting Antecedent MFs'):
-                        self.set_antecendents_mfs()
-
-                    with timer('\nSetting Consequent'):
-                        self.set_consequent_mfs()
-
-                    with timer('\nSetting Rules'):
-                        self.set_rules(t)
-
-                    with timer('\nSetting FIS System'):
-                        self.system = ct.ControlSystem(rules=self.rules)
-                        self.diagnose = ct.ControlSystemSimulation(self.system)
-
-                    with timer('\nMaking Model Predictions'):
-                        for c2b in range(115, 130):
-                            self.fis_model_predict_score(i, self.defuzzify_switcher[d], c2b)
+                    for c2b in range(115, 130):
+                        with timer('\nMaking FIS Model Predictions with defuzzify method ' + self.defuzzify_switcher[d]
+                                   + ' & threshold ' + str(c2b)):
+                            self.fis_model_predict_score(self.defuzzify_switcher[d], c2b)
 
             self.download_predict_log()
 
@@ -270,7 +336,13 @@ class WDBCFis:
         # Used for MF shaping when feature distribution filtered by target
         self.X_y_train = pd.concat([self.X_train, self.y_train], axis=1)
 
-    def set_test_cfg(self, t):
+    def set_test_global_cfg(self, t):
+        self.t_enabled = t[0]['Config'][0]['Enabled']
+        self.t_id = t[0]['Config'][0]['Id']
+        self.t_rs = t[0]['Config'][0]['Rs']
+        self.t_mfgrp = t[0]['Config'][0]['Mfgrp']
+
+    def set_test_ant_con_cfg(self, t):
         for cfg in t:
             if 'Ant' in cfg:
                 for f in cfg['Ant']:
@@ -357,6 +429,14 @@ class WDBCFis:
         t = str(self.transform_class_to_target(t))
         return fz.trapmf(self.ant[a].universe, [s['min' + t], s['q25' + t], s['q75' + t], s['max' + t]])
 
+    def mf_zmf(self, a, t, s):
+        t = str(self.transform_class_to_target(t))
+        return fz.zmf(self.ant[a].universe, s['min' + t], s['max' + t])
+
+    def mf_smf(self, a, t, s):
+        t = str(self.transform_class_to_target(t))
+        return fz.smf(self.ant[a].universe, s['min' + t], s['max' + t])
+
     def set_consequent_mfs(self):
         for c in self.con_cfg:
             for k, v in c.items():
@@ -392,8 +472,7 @@ class WDBCFis:
             r = ct.Rule(antecedent, consequent=consequent, label=label)
             self.rules.append(r)
 
-    def fis_model_predict_score(self, test_num, defuzzify_method, crisp_threshold):
-        test_num = str(test_num)
+    def fis_model_predict_score(self, defuzzify_method, crisp_threshold):
         y_pred = []
         for di, dr in self.X_test.iterrows():
             for si, sv in dr.iteritems():
@@ -410,45 +489,41 @@ class WDBCFis:
 
         acc = accuracy_score(self.y_test, y_pred)
         sen = recall_score(self.y_test, y_pred)
-        ref = 't' + str(test_num) + '_FIS_ct' + str(crisp_threshold) + '_' + defuzzify_method
-        self.log_prediction(ref, 'FIS', defuzzify_method, acc, sen)
-
+        ref = 'rs' + str(self.t_rs) + '_id' + str(self.t_id) + '_FIS_ct' + str(crisp_threshold) + '_' + defuzzify_method
+        self.log_prediction(ref, self.t_rs, self.t_id, self.t_mfgrp, 'FIS', defuzzify_method, crisp_threshold, acc, sen)
         self.confusion_matrix(self.y_test, y_pred, ref, 'FIS')
 
         # JP see self.system.view_n() and see if useful, what it does
         #self.system.view_n()
 
-    def lr_model_predict_score(self, test_num):
-        test_num = str(test_num)
+    def lr_model_predict_score(self):
         lr = LogisticRegression(random_state=self.random_state)
         lr.fit(self.X_train, self.y_train)
         y_pred = lr.predict(self.X_test)
         acc = accuracy_score(self.y_test, y_pred)
         sen = recall_score(self.y_test, y_pred)
-        ref = 't' + str(test_num) + '_LR'
-        self.log_prediction(ref, 'LR', 'n/a', acc, sen)
+        ref = 'rs' + str(self.t_rs) + '_LR'
+        self.log_prediction(ref, self.t_rs, 'n/a', 'n/a', 'LR', 'n/a', 'n/a', acc, sen)
         self.confusion_matrix(self.y_test, y_pred, ref, 'LR')
 
-    def dtc_model_predict_score(self, test_num):
-        test_num = str(test_num)
+    def dtc_model_predict_score(self):
         dtc = DecisionTreeClassifier(random_state=self.random_state)
         dtc.fit(self.X_train, self.y_train)
         y_pred = dtc.predict(self.X_test)
         acc = accuracy_score(self.y_test, y_pred)
         sen = recall_score(self.y_test, y_pred)
-        ref = 't' + str(test_num) + '_DTC'
-        self.log_prediction(ref, 'DTC', 'n/a', acc, sen)
+        ref = 'rs' + str(self.t_rs) + '_DTC'
+        self.log_prediction(ref, self.t_rs, 'n/a', 'n/a', 'DTC', 'n/a', 'n/a', acc, sen)
         self.confusion_matrix(self.y_test, y_pred, ref, 'DTC')
 
-    def rfc_model_predict_score(self, test_num):
-        test_num = str(test_num)
+    def rfc_model_predict_score(self):
         rfc = RandomForestClassifier(random_state=self.random_state)
         rfc.fit(self.X_train, self.y_train)
         y_pred = rfc.predict(self.X_test)
         acc = accuracy_score(self.y_test, y_pred)
         sen = recall_score(self.y_test, y_pred)
-        ref = 't' + str(test_num) + '_RFC'
-        self.log_prediction(ref, 'RFC', 'n/a', acc, sen)
+        ref = 'rs' + str(self.t_rs) + '_RFC'
+        self.log_prediction(ref, self.t_rs, 'n/a', 'n/a', 'RFC', 'n/a', 'n/a', acc, sen)
         self.confusion_matrix(self.y_test, y_pred, ref, 'RFC')
 
     def confusion_matrix(self, y, y_pred, ref, model_name):
@@ -464,13 +539,16 @@ class WDBCFis:
         plt.close()
         #plt.show()
 
-    def log_prediction(self, ref, clf, dm, acc, sen):
-        self.predict_log.append([ref, clf, dm, round(acc, 3), round(sen, 3)])
+    def log_prediction(self, ref, trs, tid, mfgrp, clf, dm, cbt, acc, sen):
+        self.predict_log.append([ref, trs, tid, mfgrp, clf, dm, cbt, round(acc, 3), round(sen, 3)])
 
     def download_predict_log(self):
-        df_predict_log = pd.DataFrame(self.predict_log, columns=['Ref', 'Clf', 'Dm', 'Acc', 'Sen'])
-        df_predict_log.sort_values(by=['Sen', 'Acc', 'Clf', 'Dm'], ascending=False, inplace=True)
+        df_predict_log = pd.DataFrame(self.predict_log, columns=['Ref', 'Rs', 'Id', 'Mfgrp', 'Clf', 'Dm', 'Ct', 'Acc',
+                                                                 'Sen'])
+        df_predict_log.sort_values(by=['Sen', 'Acc', 'Dm', 'Ct', 'Clf',  'Rs', 'Id'], ascending=[False, False, True,
+                                                                                                 True, True, True, True]
+                                   , inplace=True)
+        df_predict_log['Rank'] = np.arange(1, len(df_predict_log) + 1)
         df_predict_log.to_csv('data/predict_log.csv', header=True, index=False)
-
 
 wdbcFis = WDBCFis()

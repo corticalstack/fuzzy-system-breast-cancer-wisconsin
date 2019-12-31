@@ -260,7 +260,7 @@ class WDBCFis:
                     with timer('\nRandom Forest Classification ML Model Prediction'):
                         self.rfc_model_predict_score()
 
-                for d in range(1, 5):
+                for d in range(1, 6):
                     self.ant = {}
                     self.diagnosis = None
                     self.rules = []
@@ -274,7 +274,7 @@ class WDBCFis:
                     self.system = ct.ControlSystem(rules=self.rules)
                     self.diagnose = ct.ControlSystemSimulation(self.system)
 
-                    for c2b in range(90, 130):
+                    for c2b in range(90, 131):
                         with timer('\nMaking FIS Model Predictions with defuzzify method ' + self.defuzzify_switcher[d]
                                    + ' & threshold ' + str(c2b)):
                             self.fis_model_predict_score(self.defuzzify_switcher[d], c2b)
@@ -495,13 +495,10 @@ class WDBCFis:
             crisp_to_binary = 0 if self.diagnose.output['diagnosis'] < crisp_threshold else 1
             y_pred.append(crisp_to_binary)
 
-        acc = accuracy_score(self.y_test, y_pred)
-        sen = recall_score(self.y_test, y_pred)
-        spe = self.specificity_score(self.y_test, y_pred)
         ref = 'rs' + str(self.t_rs) + '_id' + str(self.t_id) + '_FIS_ct' + str(crisp_threshold) + '_' + defuzzify_method
-        self.log_prediction(ref, self.t_rs, self.t_id, self.t_mfgrp, 'FIS', defuzzify_method, crisp_threshold, acc, sen,
-                            spe)
-        self.confusion_matrix(self.y_test, y_pred, ref)
+        self.log_prediction(ref, self.t_rs, self.t_id, self.t_mfgrp, 'FIS', defuzzify_method, crisp_threshold,
+                            self.y_test, y_pred)
+        self.plot_cm(self.y_test, y_pred, ref)
 
         # JP see self.system.view_n() and see if useful, what it does
         #self.system.view_n()
@@ -510,36 +507,27 @@ class WDBCFis:
         lr = LogisticRegression(random_state=self.random_state)
         lr.fit(self.X_train, self.y_train)
         y_pred = lr.predict(self.X_test)
-        acc = accuracy_score(self.y_test, y_pred)
-        sen = recall_score(self.y_test, y_pred)
-        spe = self.specificity_score(self.y_test, y_pred)
         ref = 'rs' + str(self.t_rs) + '_LR'
-        self.log_prediction(ref, self.t_rs, 'n/a', 'n/a', 'LR', 'n/a', 'n/a', acc, sen, spe)
-        self.confusion_matrix(self.y_test, y_pred, ref)
+        self.log_prediction(ref, self.t_rs, 'n/a', 'n/a', 'LR', 'n/a', 'n/a', self.y_test, y_pred)
+        self.plot_cm(self.y_test, y_pred, ref)
 
     def dtc_model_predict_score(self):
         dtc = DecisionTreeClassifier(random_state=self.random_state)
         dtc.fit(self.X_train, self.y_train)
         y_pred = dtc.predict(self.X_test)
-        acc = accuracy_score(self.y_test, y_pred)
-        sen = recall_score(self.y_test, y_pred)
-        spe = self.specificity_score(self.y_test, y_pred)
         ref = 'rs' + str(self.t_rs) + '_DTC'
-        self.log_prediction(ref, self.t_rs, 'n/a', 'n/a', 'DTC', 'n/a', 'n/a', acc, sen, spe)
-        self.confusion_matrix(self.y_test, y_pred, ref)
+        self.log_prediction(ref, self.t_rs, 'n/a', 'n/a', 'DTC', 'n/a', 'n/a', self.y_test, y_pred)
+        self.plot_cm(self.y_test, y_pred, ref)
 
     def rfc_model_predict_score(self):
         rfc = RandomForestClassifier(random_state=self.random_state)
         rfc.fit(self.X_train, self.y_train)
         y_pred = rfc.predict(self.X_test)
-        acc = accuracy_score(self.y_test, y_pred)
-        sen = recall_score(self.y_test, y_pred)
-        spe = self.specificity_score(self.y_test, y_pred)
         ref = 'rs' + str(self.t_rs) + '_RFC'
-        self.log_prediction(ref, self.t_rs, 'n/a', 'n/a', 'RFC', 'n/a', 'n/a', acc, sen, spe)
-        self.confusion_matrix(self.y_test, y_pred, ref)
+        self.log_prediction(ref, self.t_rs, 'n/a', 'n/a', 'RFC', 'n/a', 'n/a', self.y_test, y_pred)
+        self.plot_cm(self.y_test, y_pred, ref)
 
-    def confusion_matrix(self, y, y_pred, ref):
+    def plot_cm(self, y, y_pred, ref):
         cm = confusion_matrix(y, y_pred)
         ax = plt.subplot()
         sns.heatmap(cm, annot=True, ax=ax, annot_kws={"size": 14}, fmt='d', cmap='Greens', cbar=False)
@@ -552,16 +540,24 @@ class WDBCFis:
         plt.close()
         #plt.show()
 
-    def log_prediction(self, ref, trs, tid, mfgrp, clf, dm, cbt, acc, sen, spe):
-        self.predict_log.append([ref, trs, tid, mfgrp, clf, dm, cbt, round(sen, 3), round(acc, 3), round(spe, 3)])
+    def log_prediction(self, ref, trs, tid, mfgrp, clf, dm, cbt, y_test, y_pred):
+        acc = round(accuracy_score(y_test, y_pred), 3)
+        sen = round(recall_score(y_test, y_pred), 3)
+        spe = round(self.specificity_score(y_test, y_pred), 3)
+        tn, fp, fn, tp = confusion_matrix(y_test, y_pred).ravel()
+        self.predict_log.append([ref, trs, tid, mfgrp, clf, dm, cbt, tp, fp, tn, fn, sen, acc, spe])
 
     def download_predict_log(self):
-        df_predict_log = pd.DataFrame(self.predict_log, columns=['Ref', 'Rs', 'Id', 'Mfgrp', 'Clf', 'Dm', 'Ct', 'Sen',
-                                                                 'Acc', 'Spe'])
-        df_predict_log.sort_values(by=['Sen', 'Acc', 'Spe', 'Dm', 'Ct', 'Clf',  'Rs', 'Id'],
-                                   ascending=[False, False, False, True, True, True, True, True], inplace=True)
-        df_predict_log['Rank'] = np.arange(1, len(df_predict_log) + 1)
-        df_predict_log.to_csv('data/predict_log.csv', header=True, index=False)
+        df_pred_log = pd.DataFrame(self.predict_log, columns=['Ref', 'Rs', 'Id', 'Mfgrp', 'Clf', 'Dm', 'Ct', 'Tp', 'Fp',
+                                                              'Tn', 'Fn', 'Sen', 'Acc', 'Spe'])
+        df_pred_log.sort_values(by=['Sen', 'Acc', 'Spe', 'Dm', 'Ct', 'Clf',  'Rs', 'Id'],
+                                ascending=[False, False, False, True, True, True, True, True], inplace=True)
+        df_pred_log['Rank'] = np.arange(1, len(df_pred_log) + 1)
+        df_pred_log.to_csv('data/predict_log.csv', header=True, index=False)
+
+        df_log_sum = df_pred_log[['Rank', 'Clf', 'Ref', 'Rs', 'Mfgrp', 'Dm', 'Tp', 'Fp', 'Tn', 'Fn', 'Sen', 'Acc', 'Spe']].copy()
+        df_log_sum.drop_duplicates(subset=['Clf', 'Rs', 'Mfgrp', 'Dm'], keep='first', inplace=True)
+        df_log_sum.to_csv('data/predict_log_sum.csv', header=True, index=False)
 
 
 wdbcFis = WDBCFis()

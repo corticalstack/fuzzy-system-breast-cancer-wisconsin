@@ -6,14 +6,10 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 from sklearn.feature_selection import chi2, SelectKBest
 from sklearn.ensemble import RandomForestClassifier
-from sklearn.preprocessing import MinMaxScaler
 from sklearn.model_selection import train_test_split
 from sklearn.cluster import KMeans
-from mpl_toolkits.mplot3d import Axes3D  # Required for 3d projection
 from scipy.spatial import ConvexHull
-from sklearn.decomposition import PCA, KernelPCA
 from sklearn.preprocessing import StandardScaler, MinMaxScaler
-
 
 
 @contextmanager
@@ -106,6 +102,7 @@ class WDBCAnalysis:
         print('\n', '_' * 40, 'Shape After Data Load', '_' * 40)
         self.print_shape()
 
+    # Encode string class label to binary
     def encode_target(self):
         self.wdbc_full['Diagnosis'] = self.wdbc_full['Diagnosis'].map(self.label_map_string_2_int)
         self.wdbc_full['Diagnosis'].astype(int)
@@ -147,9 +144,14 @@ class WDBCAnalysis:
 
     def set_X_y(self):
         self.X = self.wdbc_full.copy()
+
+        # Remove individual sample ID and target label
         self.X.drop(['ID', 'Diagnosis'], axis=1, inplace=True)
+
+        # Set y as target class label
         self.y = pd.Series(self.wdbc_full.Diagnosis)
 
+    # Get feature importance by chi-squared
     def univariate_feature_selection(self):
         print('\n', '_' * 40, 'Univariate Feature Selection With Chi-squared', '_' * 40)
         k = 15
@@ -160,6 +162,7 @@ class WDBCAnalysis:
         features_selected = self.X.columns[cols]
         print(features_selected)
 
+    # Get feature importance by RFC
     def random_forest_classifier(self):
         print('\n\n', '_' * 40, 'Random Forest Classifier', '_' * 40)
         data = pd.DataFrame(columns=['Feature', 'Random Forest Importance Score'])
@@ -207,6 +210,7 @@ class WDBCAnalysis:
         plt.savefig(fname='plots/' + dataset_name + ' - distplot.png', dpi=300, format='png')
         plt.show()
 
+    # Plot feature correlation
     def correlation_heatmap(self, title='Correlation Heatmap', drop=False):
         # Top x selected features
         df_corr = self.wdbc_full[self.features_selected].copy()
@@ -263,6 +267,7 @@ class WDBCAnalysis:
             plt.savefig(fname='plots/' + dataset_name + ' - kdeplot target - ' + col + '.png', dpi=300, format='png')
             plt.show()
 
+    # Determine linear separability
     def linearity(self, dataset, dataset_name):
         buckets = [0, 1]
         self.convex_hull(dataset, buckets, cola='ConcavePointsMax', colb='TextureMean', target='Diagnosis',
@@ -270,6 +275,7 @@ class WDBCAnalysis:
         self.convex_hull(dataset, buckets, cola='PerimeterMax', colb='AreaSe', target='Diagnosis',
                          dataset_name=dataset_name)
 
+    # Draw convex hull around 2 buckets of feature points
     def convex_hull(self, df, buckets, cola, colb, target, dataset_name):
         cmap = plt.get_cmap('Set1')
         plt.clf()
@@ -291,6 +297,7 @@ class WDBCAnalysis:
                     format='png')
         plt.show()
 
+    # K-means clustering
     def cluster(self, dataset, dataset_name, idx):
         df_temp = dataset.copy()
         try:

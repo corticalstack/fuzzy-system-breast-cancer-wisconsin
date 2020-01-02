@@ -12,7 +12,6 @@ from sklearn.tree import DecisionTreeClassifier
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import accuracy_score, confusion_matrix, recall_score
 from scipy import stats
-from matplotlib import pyplot as plt
 import seaborn as sns
 import matplotlib.pyplot as plt
 
@@ -35,32 +34,37 @@ class WDBCFis:
         self.X_test = None
         self.y_train = None
         self.y_test = None
-        self.y_predict = []
 
         self.predict_log = []
 
+        # Globals for test enabled and test config
         self.t_enabled = None
         self.t_id = None
         self.t_rs = None
         self.t_mfgrp = None
+
+        # Support running non-fis models only once per feature rule set
         self.last_rs = None
 
+        # FIS components
         self.ant = {}
         self.diagnosis = None
         self.rules = []
-        self.system = None
-
-        self.crisp_binary_threshold = 0
-        self.defuzzify_method = None
-        self.defuzzify_switcher = {1: 'centroid', 2: 'bisector', 3: 'mom', 4: 'som', 5: 'lom'}
-
         self.ops = {
             '&': operator.and_,
             '|': operator.or_
         }
+        self.system = None
+        self.crisp_binary_threshold = 0
 
+        # Map cycling through range to defuzzification methods to actual mode name
+        self.defuzzify_switcher = {1: 'centroid', 2: 'bisector', 3: 'mom', 4: 'som', 5: 'lom'}
+
+        # Support plotting of unique MF only once
         self.mf_plotted = {}
 
+        # Suite of FIS tests that include antecedents and their configured term MFs, consequent terms and Mfs,
+        # and rules linking the 2
         self.tests = [[{'Config': [{'Id': 1, 'Rs': 1, 'Mfgrp': 'gauss', 'Enabled': True}]},
                        {'Ant': [{'PerimeterMax': {'mf': {'low': 'gaussmf', 'high': 'gaussmf'}}},
                                 {'ConcavePointsMax': {'mf': {'low': 'gaussmf', 'high': 'gaussmf'}}}]},
@@ -241,16 +245,22 @@ class WDBCFis:
                     continue
 
                 with timer('\nTest ' + str(self.t_id) + '_' + str(self.t_rs)):
+
+                    # Clear any previous FIS test config
                     self.ant_cfg = []
                     self.con_cfg = []
                     self.rule_cfg = []
+
                     self.set_test_ant_con_cfg(t)
 
                 with timer('\nPreparing dataset for test'):
+
+                    # Partition dataset and set partition cols as per FIS test antecedents
                     self.train_test_split()
                     self.set_X_train_test_cols()
                     self.set_X_y_train()
 
+                # Execute non-FIS model predict and score only once per RS
                 if self.last_rs != self.t_rs:
                     self.last_rs = self.t_rs
                     with timer('\nLogistic Regression ML Model Prediction'):
@@ -260,11 +270,13 @@ class WDBCFis:
                     with timer('\nRandom Forest Classification ML Model Prediction'):
                         self.rfc_model_predict_score()
 
+                # For each defuzzification method
                 for d in range(1, 6):
                     self.ant = {}
                     self.diagnosis = None
                     self.rules = []
 
+                    # Prepare FIS components
                     self.create_antecendents_universe(defuzzify_method=self.defuzzify_switcher[d])
                     self.create_consequent_universe(defuzzify_method=self.defuzzify_switcher[d])
                     self.set_antecendents_mfs()
@@ -274,13 +286,16 @@ class WDBCFis:
                     self.system = ct.ControlSystem(rules=self.rules)
                     self.diagnose = ct.ControlSystemSimulation(self.system)
 
+                    # For each crisp to binary threshold limit in required range
                     for c2b in range(90, 131):
                         with timer('\nMaking FIS Model Predictions with defuzzify method ' + self.defuzzify_switcher[d]
                                    + ' & threshold ' + str(c2b)):
+                            # Compute FIS and score classification
                             self.fis_model_predict_score(self.defuzzify_switcher[d], c2b)
 
             self.download_predict_log()
 
+    # Suite of methods for feature distribution statistics that support MF shaping
     @staticmethod
     def feature_std(feat, df, target):
         return df.loc[df['Diagnosis'] == target, feat].std()
@@ -329,6 +344,7 @@ class WDBCFis:
     def remove_target_from_X(self):
         self.X.drop('Diagnosis', axis=1, inplace=True)
 
+    # Split dataset into train (70%) and test (30%) partitions
     def train_test_split(self):
         self.X_train, self.X_test, self.y_train, self.y_test = train_test_split(self.X, self.y, test_size=0.30,
                                                                                 random_state=self.random_state)
@@ -347,6 +363,7 @@ class WDBCFis:
         self.t_rs = t[0]['Config'][0]['Rs']
         self.t_mfgrp = t[0]['Config'][0]['Mfgrp']
 
+    # Parse test config grabbing MF term and shape
     def set_test_ant_con_cfg(self, t):
         for cfg in t:
             if 'Ant' in cfg:
@@ -396,9 +413,9 @@ class WDBCFis:
         for c in self.ant_cfg:
             for k, v in c.items():
                 if k == a:
+                    # Execute MF function associated with configured antecedent
                     self.ant[a][v[0]] = getattr(self, 'mf_' + v[1])(a, v[0], s)
-                    #ant_mf = a + v[1]
-        if a + v[1] not in self.mf_plotted:
+        if a + v[1] not in self.mf_plotted: # If not done then plot term MFs for antecedent
             self.mf_plotted[a + v[1]] = True
             self.ant[a].view()
 
@@ -422,6 +439,7 @@ class WDBCFis:
 
         return s
 
+    # Suite of calls to skfuzzy functions to shape term MFs to feature distributions
     def mf_gaussmf(self, a, t, s):
         t = str(self.transform_class_to_target(t))
         return fz.gaussmf(self.ant[a].universe, s['mean' + t], s['std' + t])
@@ -456,6 +474,7 @@ class WDBCFis:
             if 'Rules' in r:
                 self.add_rules(r['Rules'])
 
+    # Parse configured test rules
     def add_rules(self, rules):
         for r in rules:
             antecedent = None
@@ -473,35 +492,53 @@ class WDBCFis:
                     if antecedent is None:
                         antecedent = self.ant[arg[0]][arg[1]]
                     else:
-                        antecedent = op_func(antecedent, self.ant[arg[0]][arg[1]])
+                        antecedent = op_func(antecedent, self.ant[arg[0]][arg[1]])  # Link antecedent terms
             r = ct.Rule(antecedent, consequent=consequent, label=label)
             self.rules.append(r)
 
     def fis_model_predict_score(self, defuzzify_method, crisp_threshold):
         y_pred = []
+
+        # Set to true to support debugging and output analysis
         dv = False
+        ychk = False
+
+        # For each sample in test partition
         for di, dr in self.X_test.iterrows():
+            # Take each feature value in test sample and pass it to previously configured antecedent
             for si, sv in dr.iteritems():
                 self.diagnose.input[si] = sv
             try:
-                self.diagnose.compute()
+                self.diagnose.compute()  # Now execute the FIS
                 #self.diagnose.print_state()
-                if dv is True:
+                if dv:
                     self.diagnosis.view(sim=self.diagnose)
             except ValueError:
                 print(self.diagnose.input)
                 continue
 
+            # Transform crsip to binary using threshold
             crisp_to_binary = 0 if self.diagnose.output['diagnosis'] < crisp_threshold else 1
+            if ychk:  # If set to true, supports checking terms MF shape
+                if self.y_test.loc[di] != crisp_to_binary:
+                    print('Ground truth is ', self.y_test.loc[di], ' and pred is ', crisp_to_binary)
+                    print('Crisp output is ', crisp_to_binary)
+                    print('Inputs are')
+                    for si, sv in dr.iteritems():
+                        print(si, ' = ', sv)
+
+                    self.diagnosis.view(sim=self.diagnose)
+
+            # Add to array of binary predictions for test set
             y_pred.append(crisp_to_binary)
 
+        # Log test prediction results
         ref = 'rs' + str(self.t_rs) + '_id' + str(self.t_id) + '_FIS_ct' + str(crisp_threshold) + '_' + defuzzify_method
         self.log_prediction(ref, self.t_rs, self.t_id, self.t_mfgrp, 'FIS', defuzzify_method, crisp_threshold,
                             self.y_test, y_pred)
-        self.plot_cm(self.y_test, y_pred, ref)
 
-        # JP see self.system.view_n() and see if useful, what it does
-        #self.system.view_n()
+        # Plot confusion matrix
+        self.plot_cm(self.y_test, y_pred, ref)
 
     def lr_model_predict_score(self):
         lr = LogisticRegression(random_state=self.random_state)
@@ -547,6 +584,7 @@ class WDBCFis:
         tn, fp, fn, tp = confusion_matrix(y_test, y_pred).ravel()
         self.predict_log.append([ref, trs, tid, mfgrp, clf, dm, cbt, tp, fp, tn, fn, sen, acc, spe])
 
+    # Save full and summarised prediction log to csv for analysis
     def download_predict_log(self):
         df_pred_log = pd.DataFrame(self.predict_log, columns=['Ref', 'Rs', 'Id', 'Mfgrp', 'Clf', 'Dm', 'Ct', 'Tp', 'Fp',
                                                               'Tn', 'Fn', 'Sen', 'Acc', 'Spe'])

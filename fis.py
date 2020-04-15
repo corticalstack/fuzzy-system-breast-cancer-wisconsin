@@ -1,9 +1,17 @@
+# Seed the NumPy random generator
+from numpy.random import seed
+seed(1)
+
+import tensorflow as tf
+#tf.random.set_seed(2)
+
 import time
 from contextlib import contextmanager
 import collections
 import operator
 import pandas as pd
 import numpy as np
+
 import skfuzzy as fz
 from skfuzzy import control as ct
 from sklearn.model_selection import train_test_split
@@ -14,7 +22,7 @@ from sklearn.metrics import accuracy_score, confusion_matrix, recall_score
 from scipy import stats
 import seaborn as sns
 import matplotlib.pyplot as plt
-
+from tensorflow.keras import models, layers, optimizers
 
 @contextmanager
 def timer(title):
@@ -45,6 +53,11 @@ class WDBCFis:
 
         # Support running non-fis models only once per feature rule set
         self.last_rs = None
+
+        # Network parameters
+        self.epochs = 40
+        self.batch_size = 100
+        self.verbose = 0
 
         # FIS components
         self.ant = {}
@@ -269,6 +282,9 @@ class WDBCFis:
                         self.dtc_model_predict_score()
                     with timer('\nRandom Forest Classification ML Model Prediction'):
                         self.rfc_model_predict_score()
+                    with timer('\nNeural Network ML Model Prediction'):
+                        self.nn_model_predict_score()
+
 
                 # For each defuzzification method
                 for d in range(1, 6):
@@ -564,6 +580,29 @@ class WDBCFis:
         self.log_prediction(ref, self.t_rs, 'n/a', 'n/a', 'RFC', 'n/a', 'n/a', self.y_test, y_pred)
         self.plot_cm(self.y_test, y_pred, ref)
 
+    def nn_model_predict_score(self):
+        # Build model
+        model = models.Sequential()
+        model.add(layers.Dense(self.X_train.shape[1] * 4, kernel_initializer='normal', activation='relu',
+                               input_shape=(self.X_train.shape[1],)))
+        model.add(layers.Dense(self.X_train.shape[1] * 4, kernel_initializer='normal', activation='relu'))
+        model.add(layers.Dense(1, activation='sigmoid'))
+        model.compile(optimizer='adam', loss='binary_crossentropy', metrics=['accuracy'])
+
+        # Keras requires numpy arrays (not dataframes)
+        X_train = self.X_train.to_numpy()
+        y_train = self.y_train.to_numpy()
+        X_test = self.X_test.to_numpy()
+        y_test = self.y_test.to_numpy()
+
+        self.history = model.fit(X_train, y_train, validation_data=(X_test, y_test), epochs=self.epochs, verbose=self.verbose, batch_size = 1)
+
+        y_pred = model.predict_classes(X_test)
+
+        ref = 'rs' + str(self.t_rs) + '_NN'
+        self.log_prediction(ref, self.t_rs, 'n/a', 'n/a', 'NN', 'n/a', 'n/a', self.y_test, y_pred)
+        self.plot_cm(self.y_test, y_pred, ref)
+
     def plot_cm(self, y, y_pred, ref):
         cm = confusion_matrix(y, y_pred)
         ax = plt.subplot()
@@ -599,3 +638,4 @@ class WDBCFis:
 
 
 wdbcFis = WDBCFis()
+
